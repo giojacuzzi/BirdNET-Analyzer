@@ -62,7 +62,7 @@ def _loadAudioFile(f, label_vector, config):
         x_train.extend(embeddings)
         y_train.extend(batch_label)
 
-    return x_train, y_train
+    return x_train, y_train, [f] # Return audio file name
 
 def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     """Loads the data for training.
@@ -132,6 +132,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     # Load training data
     x_train = []
     y_train = []
+    f_train = [] # Training file names
 
     for folder in folders:
 
@@ -171,6 +172,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     result = task.get()
                     x_train += result[0]
                     y_train += result[1]
+                    f_train += result[2]
                     num_files_processed += 1
                     progress_bar.update(1)
                     if progress_callback:
@@ -179,6 +181,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     # Convert to numpy arrays
     x_train = np.array(x_train, dtype="float32")
     y_train = np.array(y_train, dtype="float32")
+    f_train = np.array(f_train)
     
     # Save to cache?
     if cache_mode == "save":
@@ -190,7 +193,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
             print(f"\t...error saving cache: {e}", flush=True)
 
     # Return only the valid labels for further use
-    return x_train, y_train, valid_labels
+    return x_train, y_train, f_train, valid_labels
 
 
 def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
@@ -205,7 +208,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
     # Load training data
     print("Loading training data...", flush=True)
-    x_train, y_train, labels = _loadTrainingData(cfg.TRAIN_CACHE_MODE, cfg.TRAIN_CACHE_FILE, on_data_load_end)
+    x_train, y_train, f_train, labels = _loadTrainingData(cfg.TRAIN_CACHE_MODE, cfg.TRAIN_CACHE_FILE, on_data_load_end)
     print(f"...Done. Loaded {x_train.shape[0]} training samples and {y_train.shape[1]} labels.", flush=True)
 
     if cfg.AUTOTUNE:
@@ -313,6 +316,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         classifier,
         x_train,
         y_train,
+        f_train,
         epochs=cfg.TRAIN_EPOCHS,
         batch_size=cfg.TRAIN_BATCH_SIZE,
         learning_rate=cfg.TRAIN_LEARNING_RATE,
@@ -410,4 +414,14 @@ if __name__ == "__main__":
     cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL = args.autotune_executions_per_trial
 
     # Train model
-    trainModel()
+    history = trainModel()
+    auprc = history.history["val_AUPRC"]
+    auroc = history.history["val_AUROC"]
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure()
+    plt.plot(auprc, label="AUPRC")
+    plt.plot(auroc, label="AUROC")
+    plt.legend()
+    plt.xlabel("Epoch")
+    plt.show()

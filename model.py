@@ -165,6 +165,7 @@ def trainLinearClassifier(
     classifier,
     x_train,
     y_train,
+    f_train,
     epochs,
     batch_size,
     learning_rate,
@@ -211,17 +212,25 @@ def trainLinearClassifier(
     np.random.shuffle(idx)
     x_train = x_train[idx]
     y_train = y_train[idx]
+    f_train = f_train[idx]
 
     # Random val split
     if not cfg.MULTI_LABEL:
-        x_train, y_train, x_val, y_val = utils.random_split(x_train, y_train, val_split)
+        x_train, y_train, f_train, x_val, y_val, f_val = utils.random_split(x_train, y_train, f_train, val_split)
     else:
+        # TODO: Return f_train and f_val
         x_train, y_train, x_val, y_val = utils.random_multilabel_split(x_train, y_train, val_split)
 
     print(
         f"Training on {x_train.shape[0]} samples, validating on {x_val.shape[0]} samples.",
         flush=True,
     )
+    print(f"Training samples ({f_train.shape[0]}):", flush=True)
+    for f in f_train:
+        print(f)
+    print(f"Validation samples ({f_val.shape[0]}):", flush=True)
+    for f in f_val:
+        print(f)
 
     # Upsample training data
     if upsampling_ratio > 0:
