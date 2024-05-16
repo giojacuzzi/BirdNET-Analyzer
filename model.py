@@ -231,6 +231,18 @@ def trainLinearClassifier(
     print(f"Validation samples ({f_val.shape[0]}):", flush=True)
     for f in f_val:
         print(f)
+    
+    # Write the validation samples to file for later reference
+    import csv
+    val_path = cfg.CUSTOM_CLASSIFIER
+    val_path = val_path.replace(".tflite", "_ValidationSamples.csv")
+    print(f'YO {os.path.dirname(val_path)}')
+    if not os.path.exists(os.path.dirname(val_path)):
+        os.makedirs(os.path.dirname(val_path))
+    with open(val_path, 'w', newline='') as file:
+        writer = csv.writer(file)
+        for string in f_val:
+            writer.writerow([string])
 
     # Upsample training data
     if upsampling_ratio > 0:
