@@ -223,20 +223,20 @@ def trainLinearClassifier(
 
     print(
         f"Training on {x_train.shape[0]} samples, validating on {x_val.shape[0]} samples.",
-        flush=True,
+        # flush=True,
     )
-    print(f"Training samples ({f_train.shape[0]}):", flush=True)
-    for f in f_train:
-        print(f)
-    print(f"Validation samples ({f_val.shape[0]}):", flush=True)
-    for f in f_val:
-        print(f)
+    # print(f"Training samples ({f_train.shape[0]}):", flush=True)
+    # for f in f_train:
+    #     print(f)
+    # print(f"Validation samples ({f_val.shape[0]}):", flush=True)
+    # for f in f_val:
+    #     print(f)
     
     # Write the validation samples to file for later reference
     import csv
     val_path = cfg.CUSTOM_CLASSIFIER
     val_path = val_path.replace(".tflite", "_ValidationSamples.csv")
-    print(f'YO {os.path.dirname(val_path)}')
+    print(f'Writing validation samples to file {os.path.dirname(val_path)}...')
     if not os.path.exists(os.path.dirname(val_path)):
         os.makedirs(os.path.dirname(val_path))
     with open(val_path, 'w', newline='') as file:

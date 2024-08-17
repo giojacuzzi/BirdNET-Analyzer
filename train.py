@@ -222,10 +222,11 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
             on_trial_result(0)
 
         class BirdNetTuner(keras_tuner.BayesianOptimization):
-            def __init__(self, x_train, y_train, max_trials, executions_per_trial, on_trial_result):
+            def __init__(self, x_train, y_train, f_train, max_trials, executions_per_trial, on_trial_result):
                 super().__init__(max_trials=max_trials, executions_per_trial=executions_per_trial, overwrite=True, directory="autotune", project_name="birdnet_analyzer")
                 self.x_train = x_train
                 self.y_train = y_train
+                self.f_train = f_train
                 self.on_trial_result = on_trial_result
 
             def run_trial(self, trial, *args, **kwargs):
@@ -255,6 +256,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
                         classifier,
                         self.x_train,
                         self.y_train,
+                        self.f_train,
                         epochs=cfg.TRAIN_EPOCHS,
                         batch_size=hp.Choice("batch_size", [8, 16, 32, 64, 128], default=cfg.TRAIN_BATCH_SIZE),
                         learning_rate=hp.Choice("learning_rate", [0.1, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001], default=cfg.TRAIN_LEARNING_RATE),
@@ -283,7 +285,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
                 return histories
 
-        tuner = BirdNetTuner(x_train=x_train, y_train=y_train, max_trials=cfg.AUTOTUNE_TRIALS, executions_per_trial=cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL, on_trial_result=on_trial_result)
+        tuner = BirdNetTuner(x_train=x_train, y_train=y_train, f_train=f_train, max_trials=cfg.AUTOTUNE_TRIALS, executions_per_trial=cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL, on_trial_result=on_trial_result)
         tuner.search()
         best_params = tuner.get_best_hyperparameters()[0]
         print("Best params: ")
