@@ -149,7 +149,7 @@ def random_multilabel_split(x, y, val_ratio=0.2):
     return x_train, y_train, x_val, y_val
 
 
-def random_split(x, y, f, val_ratio=0.2):
+def random_split(x, y, val_ratio=0.2):
     """Splits the data into training and validation data.
 
     Makes sure that each class is represented in both sets.
@@ -170,7 +170,7 @@ def random_split(x, y, f, val_ratio=0.2):
     num_classes = y.shape[1]
 
     # Initialize training and validation data
-    x_train, y_train, f_train, x_val, y_val, f_val = [], [], [], [], [], []
+    x_train, y_train, x_val, y_val = [], [], [], []
 
     # Split data
     for i in range(num_classes):
@@ -193,15 +193,12 @@ def random_split(x, y, f, val_ratio=0.2):
         # Append samples to training and validation data
         x_train.append(x[train_indices])
         y_train.append(y[train_indices])
-        f_train.append(f[train_indices])
         x_val.append(x[val_indices])
         y_val.append(y[val_indices])
-        f_val.append(f[val_indices])
 
         # Append negative samples to training data
         x_train.append(x[negative_indices])
         y_train.append(y[negative_indices])
-        f_train.append(f[negative_indices])
 
     # Add samples for non-event classes to training and validation data
     non_event_indices = np.where(np.sum(y[:, :], axis=1) == 0)[0]
@@ -213,32 +210,27 @@ def random_split(x, y, f, val_ratio=0.2):
     val_indices = non_event_indices[num_samples_train : num_samples_train + num_samples_val]
     x_train.append(x[train_indices])
     y_train.append(y[train_indices])
-    f_train.append(f[train_indices])
     x_val.append(x[val_indices])
     y_val.append(y[val_indices])
-    f_val.append(f[val_indices])
 
     # Concatenate data
     x_train = np.concatenate(x_train)
     y_train = np.concatenate(y_train)
-    f_train = np.concatenate(f_train)
     x_val = np.concatenate(x_val)
     y_val = np.concatenate(y_val)
-    f_val = np.concatenate(f_val)
 
     # Shuffle data
     indices = np.arange(len(x_train))
     np.random.shuffle(indices)
     x_train = x_train[indices]
     y_train = y_train[indices]
-    f_train = f_train[indices]
 
     indices = np.arange(len(x_val))
     np.random.shuffle(indices)
     x_val = x_val[indices]
     y_val = y_val[indices]
 
-    return x_train, y_train, f_train, x_val, y_val, f_val
+    return x_train, y_train, x_val, y_val
 
 
 def mixup(x, y, augmentation_ratio=0.25, alpha=0.2):

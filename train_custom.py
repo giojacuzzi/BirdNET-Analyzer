@@ -9,6 +9,7 @@ import os
 from functools import partial
 from multiprocessing.pool import Pool
 
+import pandas as pd
 import numpy as np
 import tqdm
 
@@ -92,11 +93,16 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
         else:
             print(f"\t...cache file not found: {cache_file}", flush=True)
 
+    train_files = pd.read_csv(cfg.TRAIN_DATA_PATH)
+    # print(train_files)
+    # print(train_files['folder'].unique())
+
     # DEBUG: 'folders' should contain a list of all subfolders as labels, e.g. 'Catharus guttatus_Hermit Thrush'
     # Get list of subfolders as labels
-    folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH)))
-    print('FOLDERS')
-    print(folders)
+    # folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH))
+    folders = train_files['folder'].unique()
+    # print('FOLDERS')
+    # print(folders)
 
     # DEBUG: 'labels' should contain a list of all BirdNET style labels, e.g. 'Catharus guttatus_Hermit Thrush'
     # Read all individual labels from the folder names
@@ -111,8 +117,8 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     # Sort labels
     labels = list(sorted(labels))
 
-    print('LABELS')
-    print(labels)
+    # print('LABELS')
+    # print(labels)
 
     # Get valid labels
     valid_labels = [l for l in labels if not l.lower() in cfg.NON_EVENT_CLASSES and not l.startswith("-")] 
@@ -141,10 +147,9 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     # Load training data
     x_train = []
     y_train = []
-    f_train = [] # Training file names
 
     for folder in folders:
-        print(f'LOADING FOLDER {folder}...')
+        print(f'Loading training data for {folder}...')
 
         # Get label vector
         label_vector = np.zeros((len(valid_labels),), dtype="float32")
@@ -160,19 +165,20 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
         # DEBUG: 'files' should contain a list of full paths to all training .wav examples for this folder (i.e. label)
         # Get list of files
         # Filter files that start with '.' because macOS seems to them for temp files.
-        files = filter(
-            os.path.isfile,
-            (
-                os.path.join(cfg.TRAIN_DATA_PATH, folder, f)
-                for f in sorted(os.listdir(os.path.join(cfg.TRAIN_DATA_PATH, folder)))
-                if not f.startswith(".") and f.rsplit(".", 1)[-1].lower() in cfg.ALLOWED_FILETYPES
-            ),
-        )
+        # files = filter(
+        #     os.path.isfile,
+        #     (
+        #         os.path.join(cfg.TRAIN_DATA_PATH, folder, f)
+        #         for f in sorted(os.listdir(os.path.join(cfg.TRAIN_DATA_PATH, folder)))
+        #         if not f.startswith(".") and f.rsplit(".", 1)[-1].lower() in cfg.ALLOWED_FILETYPES
+        #     ),
+        # )
+        files = train_files[train_files['folder'] == folder]['path']
 
-        print('FILES')
-        for f in files:
-            print(f)
-        sys.exit()
+        # print('FILES')
+        # for f in files:
+        #     print(f)
+        # print(label_vector)
 
         # Load files using thread pool       
         with Pool(cfg.CPU_THREADS) as p:
@@ -188,7 +194,6 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     result = task.get()
                     x_train += result[0]
                     y_train += result[1]
-                    f_train += result[2]
                     num_files_processed += 1
                     progress_bar.update(1)
                     if progress_callback:
@@ -197,7 +202,6 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     # Convert to numpy arrays
     x_train = np.array(x_train, dtype="float32")
     y_train = np.array(y_train, dtype="float32")
-    f_train = np.array(f_train)
     
     # Save to cache?
     if cache_mode == "save":
@@ -209,7 +213,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
             print(f"\t...error saving cache: {e}", flush=True)
 
     # Return only the valid labels for further use
-    return x_train, y_train, f_train, valid_labels
+    return x_train, y_train, valid_labels
 
 
 def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
@@ -224,7 +228,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
     # Load training data
     print("Loading training data...", flush=True)
-    x_train, y_train, f_train, labels = _loadTrainingData(cfg.TRAIN_CACHE_MODE, cfg.TRAIN_CACHE_FILE, on_data_load_end)
+    x_train, y_train, labels = _loadTrainingData(cfg.TRAIN_CACHE_MODE, cfg.TRAIN_CACHE_FILE, on_data_load_end)
     print(f"...Done. Loaded {x_train.shape[0]} training samples and {y_train.shape[1]} labels.", flush=True)
 
     if cfg.AUTOTUNE:
@@ -238,11 +242,10 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
             on_trial_result(0)
 
         class BirdNetTuner(keras_tuner.BayesianOptimization):
-            def __init__(self, x_train, y_train, f_train, max_trials, executions_per_trial, on_trial_result):
+            def __init__(self, x_train, y_train, max_trials, executions_per_trial, on_trial_result):
                 super().__init__(max_trials=max_trials, executions_per_trial=executions_per_trial, overwrite=True, directory="autotune", project_name="birdnet_analyzer")
                 self.x_train = x_train
                 self.y_train = y_train
-                self.f_train = f_train
                 self.on_trial_result = on_trial_result
 
             def run_trial(self, trial, *args, **kwargs):
@@ -272,7 +275,6 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
                         classifier,
                         self.x_train,
                         self.y_train,
-                        self.f_train,
                         epochs=cfg.TRAIN_EPOCHS,
                         batch_size=hp.Choice("batch_size", [8, 16, 32, 64, 128], default=cfg.TRAIN_BATCH_SIZE),
                         learning_rate=hp.Choice("learning_rate", [0.1, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001], default=cfg.TRAIN_LEARNING_RATE),
@@ -301,7 +303,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
                 return histories
 
-        tuner = BirdNetTuner(x_train=x_train, y_train=y_train, f_train=f_train, max_trials=cfg.AUTOTUNE_TRIALS, executions_per_trial=cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL, on_trial_result=on_trial_result)
+        tuner = BirdNetTuner(x_train=x_train, y_train=y_train, max_trials=cfg.AUTOTUNE_TRIALS, executions_per_trial=cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL, on_trial_result=on_trial_result)
         tuner.search()
         best_params = tuner.get_best_hyperparameters()[0]
         print("Best params: ")
@@ -334,7 +336,6 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         classifier,
         x_train,
         y_train,
-        f_train,
         epochs=cfg.TRAIN_EPOCHS,
         batch_size=cfg.TRAIN_BATCH_SIZE,
         learning_rate=cfg.TRAIN_LEARNING_RATE,
@@ -376,7 +377,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs. Defaults to 50.")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size. Defaults to 32.")
-    parser.add_argument("--val_split", type=float, default=0.2, help="Validation split ratio. Defaults to 0.2.")
+    parser.add_argument("--val_split", type=float, default=0.2, help="Validation split ratio. Defaults to 0.2.") # TODO
     parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate. Defaults to 0.001.")
     parser.add_argument(
         "--hidden_units",
@@ -416,7 +417,7 @@ if __name__ == "__main__":
     cfg.CUSTOM_CLASSIFIER = args.o
     cfg.TRAIN_EPOCHS = args.epochs
     cfg.TRAIN_BATCH_SIZE = args.batch_size
-    cfg.TRAIN_VAL_SPLIT = args.val_split
+    cfg.TRAIN_VAL_SPLIT = args.val_split # TODO
     cfg.TRAIN_LEARNING_RATE = args.learning_rate
     cfg.TRAIN_HIDDEN_UNITS = args.hidden_units
     cfg.TRAIN_DROPOUT = min(max(0, args.dropout), 0.9)

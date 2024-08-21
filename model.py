@@ -165,11 +165,10 @@ def trainLinearClassifier(
     classifier,
     x_train,
     y_train,
-    f_train,
     epochs,
     batch_size,
     learning_rate,
-    val_split,
+    val_split, # TODO
     upsampling_ratio,
     upsampling_mode,
     train_with_mixup,
@@ -212,37 +211,39 @@ def trainLinearClassifier(
     np.random.shuffle(idx)
     x_train = x_train[idx]
     y_train = y_train[idx]
-    f_train = f_train[idx]
 
+    # TODO: Get validation files from .csv!
     # Random val split
     if not cfg.MULTI_LABEL:
-        x_train, y_train, f_train, x_val, y_val, f_val = utils.random_split(x_train, y_train, f_train, val_split)
+        x_train, y_train, x_val, y_val = utils.random_split(x_train, y_train, val_split)
     else:
-        # TODO: Return f_train and f_val
         x_train, y_train, x_val, y_val = utils.random_multilabel_split(x_train, y_train, val_split)
+
+    print('x_train')
+    print(x_train)
+    print('y_train')
+    print(y_train)
+    print('x_val')
+    print(x_val)
+    print('y_val')
+    print(y_val)
 
     print(
         f"Training on {x_train.shape[0]} samples, validating on {x_val.shape[0]} samples.",
         # flush=True,
     )
-    # print(f"Training samples ({f_train.shape[0]}):", flush=True)
-    # for f in f_train:
-    #     print(f)
-    # print(f"Validation samples ({f_val.shape[0]}):", flush=True)
-    # for f in f_val:
-    #     print(f)
     
-    # Write the validation samples to file for later reference
-    import csv
-    val_path = cfg.CUSTOM_CLASSIFIER
-    val_path = val_path.replace(".tflite", "_ValidationSamples.csv")
-    print(f'Writing validation samples to file {os.path.dirname(val_path)}...')
-    if not os.path.exists(os.path.dirname(val_path)):
-        os.makedirs(os.path.dirname(val_path))
-    with open(val_path, 'w', newline='') as file:
-        writer = csv.writer(file)
-        for string in f_val:
-            writer.writerow([string])
+    # # Write the validation samples to file for later reference
+    # import csv
+    # val_path = cfg.CUSTOM_CLASSIFIER
+    # val_path = val_path.replace(".tflite", "_ValidationSamples.csv")
+    # print(f'Writing validation samples to file {os.path.dirname(val_path)}...')
+    # if not os.path.exists(os.path.dirname(val_path)):
+    #     os.makedirs(os.path.dirname(val_path))
+    # with open(val_path, 'w', newline='') as file:
+    #     writer = csv.writer(file)
+    #     for string in f_val:
+    #         writer.writerow([string])
 
     # Upsample training data
     if upsampling_ratio > 0:
