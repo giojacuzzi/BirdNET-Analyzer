@@ -16,6 +16,8 @@ import audio
 import config as cfg
 import model
 import utils
+import time
+import sys
 
 
 def _loadAudioFile(f, label_vector, config):
@@ -90,10 +92,13 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
         else:
             print(f"\t...cache file not found: {cache_file}", flush=True)
 
+    # DEBUG: 'folders' should contain a list of all subfolders as labels, e.g. 'Catharus guttatus_Hermit Thrush'
     # Get list of subfolders as labels
     folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH)))
+    print('FOLDERS')
+    print(folders)
 
-
+    # DEBUG: 'labels' should contain a list of all BirdNET style labels, e.g. 'Catharus guttatus_Hermit Thrush'
     # Read all individual labels from the folder names
     labels = []
 
@@ -105,6 +110,9 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
 
     # Sort labels
     labels = list(sorted(labels))
+
+    print('LABELS')
+    print(labels)
 
     # Get valid labels
     valid_labels = [l for l in labels if not l.lower() in cfg.NON_EVENT_CLASSES and not l.startswith("-")] 
@@ -136,6 +144,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     f_train = [] # Training file names
 
     for folder in folders:
+        print(f'LOADING FOLDER {folder}...')
 
         # Get label vector
         label_vector = np.zeros((len(valid_labels),), dtype="float32")
@@ -148,6 +157,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
             elif label.startswith("-") and label[1:] in valid_labels: # Negative labels need to be contained in the valid labels
                 label_vector[valid_labels.index(label[1:])] = -1
 
+        # DEBUG: 'files' should contain a list of full paths to all training .wav examples for this folder (i.e. label)
         # Get list of files
         # Filter files that start with '.' because macOS seems to them for temp files.
         files = filter(
@@ -158,6 +168,11 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                 if not f.startswith(".") and f.rsplit(".", 1)[-1].lower() in cfg.ALLOWED_FILETYPES
             ),
         )
+
+        print('FILES')
+        for f in files:
+            print(f)
+        sys.exit()
 
         # Load files using thread pool       
         with Pool(cfg.CPU_THREADS) as p:
@@ -387,6 +402,12 @@ if __name__ == "__main__":
     parser.add_argument("--autotune_executions_per_trial", type=int, default=1, help="The number of times a training run with a set of hyperparameters is repeated during hyperparameter tuning (this reduces the variance). Defaults to 1.")
 
     args = parser.parse_args()
+
+    # while True:
+    #     print(f'--i {args.i}')
+    #     print(f'--o {args.o}')
+    #     print(f'--autotune {args.autotune}')
+    #     time.sleep(1)
 
     # Config
     cfg.TRAIN_DATA_PATH = args.i
