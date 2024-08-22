@@ -179,7 +179,7 @@ if __name__ == "__main__":
     validation_examples.to_csv(validation_files_csv_path, index=False)
 
     # Define sample size experiments for model development
-    sample_size_experiments = [25]
+    sample_size_experiments = [100]
 
     # For each experiment (2,5,10,25,50,100 training examples)...
     for experiment_sample_size in sample_size_experiments:
@@ -197,7 +197,7 @@ if __name__ == "__main__":
             label_examples = training_examples[training_examples['label'] == label]
             if len(label_examples) < experiment_sample_size:
                 print(f'WARNING: Less than {experiment_sample_size} examples available for label {label}')
-                # TODO: Apply data augmentation to artificially increase the number of examples to 125 (e.g. SMOTE)?
+                # TODO: Apply data augmentation to artificially increase the number of examples (e.g. SMOTE)?
             label_training = group.sample(n=min(experiment_sample_size, len(label_examples)), random_state=training_seed)
             experiment_examples = pd.concat([experiment_examples, label_training]).reset_index(drop=True)
         print(experiment_examples['label'].value_counts())
@@ -208,6 +208,13 @@ if __name__ == "__main__":
         training_files_csv_path = os.path.abspath(f'{output_path}/{model_id_stub}/training_files.csv')
         experiment_examples.to_csv(training_files_csv_path, index=False)
 
+        # Store combined training and validation filepaths
+        combined_files_csv_path = os.path.abspath(f'{output_path}/{model_id_stub}/combined_files.csv')
+        experiment_examples['dataset'] = 'training'
+        validation_examples['dataset'] = 'validation'
+        combined_examples = pd.concat([experiment_examples, validation_examples], axis=0)
+        combined_examples.to_csv(combined_files_csv_path, index=False)
+
         # Change current working directory
         os.chdir(os.path.dirname(os.path.abspath(__file__)))
         print(f'cd {os.getcwd()}')
@@ -216,7 +223,7 @@ if __name__ == "__main__":
         print(f'Training model {os.path.basename(file_model_out)} with {experiment_sample_size} examples ======================================================================================')
         command = [
             'python3', 'train_custom.py',
-            '--i', training_files_csv_path, # Path to training data references.
+            '--i', combined_files_csv_path, # Path to combined (training and validation) data references.
             '--o', file_model_out, # File path to trained classifier model output.
             '--no-autotune' if not autotune else '--autotune' # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
         ]

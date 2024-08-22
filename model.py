@@ -165,6 +165,8 @@ def trainLinearClassifier(
     classifier,
     x_train,
     y_train,
+    x_val,
+    y_val,
     epochs,
     batch_size,
     learning_rate,
@@ -206,19 +208,6 @@ def trainLinearClassifier(
     # Set random seed
     np.random.seed(cfg.RANDOM_SEED)
 
-    # Shuffle data
-    idx = np.arange(x_train.shape[0])
-    np.random.shuffle(idx)
-    x_train = x_train[idx]
-    y_train = y_train[idx]
-
-    # TODO: Get validation files from .csv!
-    # Random val split
-    if not cfg.MULTI_LABEL:
-        x_train, y_train, x_val, y_val = utils.random_split(x_train, y_train, val_split)
-    else:
-        x_train, y_train, x_val, y_val = utils.random_multilabel_split(x_train, y_train, val_split)
-
     print('x_train')
     print(x_train)
     print('y_train')
@@ -232,18 +221,6 @@ def trainLinearClassifier(
         f"Training on {x_train.shape[0]} samples, validating on {x_val.shape[0]} samples.",
         # flush=True,
     )
-    
-    # # Write the validation samples to file for later reference
-    # import csv
-    # val_path = cfg.CUSTOM_CLASSIFIER
-    # val_path = val_path.replace(".tflite", "_ValidationSamples.csv")
-    # print(f'Writing validation samples to file {os.path.dirname(val_path)}...')
-    # if not os.path.exists(os.path.dirname(val_path)):
-    #     os.makedirs(os.path.dirname(val_path))
-    # with open(val_path, 'w', newline='') as file:
-    #     writer = csv.writer(file)
-    #     for string in f_val:
-    #         writer.writerow([string])
 
     # Upsample training data
     if upsampling_ratio > 0:

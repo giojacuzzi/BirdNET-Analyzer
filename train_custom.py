@@ -93,18 +93,21 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
         else:
             print(f"\t...cache file not found: {cache_file}", flush=True)
 
-    train_files = pd.read_csv(cfg.TRAIN_DATA_PATH)
+    development_files = pd.read_csv(cfg.TRAIN_DATA_PATH)
+    train_files = development_files[development_files['dataset'] == 'training']
+    validation_files = development_files[development_files['dataset'] == 'validation']
     # print(train_files)
     # print(train_files['folder'].unique())
 
     # DEBUG: 'folders' should contain a list of all subfolders as labels, e.g. 'Catharus guttatus_Hermit Thrush'
     # Get list of subfolders as labels
     # folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH))
-    folders = train_files['folder'].unique()
+    folders = development_files['folder'].unique()
     # print('FOLDERS')
     # print(folders)
 
     # DEBUG: 'labels' should contain a list of all BirdNET style labels, e.g. 'Catharus guttatus_Hermit Thrush'
+    # TODO: Get labels from a labels column that may contain multiple separated by ',' instead of the directory names here
     # Read all individual labels from the folder names
     labels = []
 
@@ -144,12 +147,15 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     if cfg.MULTI_LABEL and cfg.UPSAMPLING_RATIO > 0 and cfg.UPSAMPLING_MODE != 'repeat':
         raise Exception("Only repeat-upsampling ist available for multi-label")
 
-    # Load training data
+    # Load training and validation data
     x_train = []
     y_train = []
 
+    x_val = []
+    y_val = []
+
     for folder in folders:
-        print(f'Loading training data for {folder}...')
+        print(f'Loading data for {folder}...')
 
         # Get label vector
         label_vector = np.zeros((len(valid_labels),), dtype="float32")
@@ -162,33 +168,15 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
             elif label.startswith("-") and label[1:] in valid_labels: # Negative labels need to be contained in the valid labels
                 label_vector[valid_labels.index(label[1:])] = -1
 
-        # DEBUG: 'files' should contain a list of full paths to all training .wav examples for this folder (i.e. label)
-        # Get list of files
-        # Filter files that start with '.' because macOS seems to them for temp files.
-        # files = filter(
-        #     os.path.isfile,
-        #     (
-        #         os.path.join(cfg.TRAIN_DATA_PATH, folder, f)
-        #         for f in sorted(os.listdir(os.path.join(cfg.TRAIN_DATA_PATH, folder)))
-        #         if not f.startswith(".") and f.rsplit(".", 1)[-1].lower() in cfg.ALLOWED_FILETYPES
-        #     ),
-        # )
-        files = train_files[train_files['folder'] == folder]['path']
-
-        # print('FILES')
-        # for f in files:
-        #     print(f)
-        # print(label_vector)
-
-        # Load files using thread pool       
+        # Load training files using thread pool  
+        print('Load training files using thread pool...')    
+        train_files_to_load = train_files[train_files['folder'] == folder]['path'] 
         with Pool(cfg.CPU_THREADS) as p:
             tasks = []
-            for f in files:
+            for f in train_files_to_load:
                 task = p.apply_async(partial(_loadAudioFile, f=f, label_vector=label_vector, config=cfg.getConfig()))
                 tasks.append(task)
-
-            # Wait for tasks to complete and monitor progress with tqdm
-            num_files_processed = 0
+            num_files_processed = 0 # Wait for tasks to complete and monitor progress with tqdm
             with tqdm.tqdm(total=len(tasks), desc=f" - loading '{folder}'", unit='f') as progress_bar:
                 for task in tasks:
                     result = task.get()
@@ -198,12 +186,34 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     progress_bar.update(1)
                     if progress_callback:
                         progress_callback(num_files_processed, len(tasks), folder)
+
+        # Load validation files using thread pool  
+        print('Load validation files using thread pool...')    
+        val_files_to_load = validation_files[validation_files['folder'] == folder]['path'] 
+        with Pool(cfg.CPU_THREADS) as p:
+            tasks = []
+            for f in val_files_to_load:
+                task = p.apply_async(partial(_loadAudioFile, f=f, label_vector=label_vector, config=cfg.getConfig()))
+                tasks.append(task)
+            num_files_processed = 0 # Wait for tasks to complete and monitor progress with tqdm
+            with tqdm.tqdm(total=len(tasks), desc=f" - loading '{folder}'", unit='f') as progress_bar:
+                for task in tasks:
+                    result = task.get()
+                    x_val += result[0]
+                    y_val += result[1]
+                    num_files_processed += 1
+                    progress_bar.update(1)
+                    if progress_callback:
+                        progress_callback(num_files_processed, len(tasks), folder)
     
     # Convert to numpy arrays
     x_train = np.array(x_train, dtype="float32")
     y_train = np.array(y_train, dtype="float32")
+    x_val = np.array(x_val, dtype="float32")
+    y_val = np.array(y_val, dtype="float32")
     
     # Save to cache?
+    # NOTE: Cache not supported!
     if cache_mode == "save":
         print(f"\t...saving training data to cache: {cache_file}", flush=True)
         try:
@@ -213,7 +223,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
             print(f"\t...error saving cache: {e}", flush=True)
 
     # Return only the valid labels for further use
-    return x_train, y_train, valid_labels
+    return x_train, y_train, x_val, y_val, valid_labels
 
 
 def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
@@ -228,8 +238,8 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
     # Load training data
     print("Loading training data...", flush=True)
-    x_train, y_train, labels = _loadTrainingData(cfg.TRAIN_CACHE_MODE, cfg.TRAIN_CACHE_FILE, on_data_load_end)
-    print(f"...Done. Loaded {x_train.shape[0]} training samples and {y_train.shape[1]} labels.", flush=True)
+    x_train, y_train, x_val, y_val, labels = _loadTrainingData(cfg.TRAIN_CACHE_MODE, cfg.TRAIN_CACHE_FILE, on_data_load_end)
+    print(f"...Done. Loaded {x_train.shape[0]} training samples and {x_val.shape[0]} validation samples across {len(labels)} labels.", flush=True)
 
     if cfg.AUTOTUNE:
         import gc
@@ -241,6 +251,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         if on_trial_result:
             on_trial_result(0)
 
+        # TODO: SUPPORT VALIDATION FOR AUTOTUNE
         class BirdNetTuner(keras_tuner.BayesianOptimization):
             def __init__(self, x_train, y_train, max_trials, executions_per_trial, on_trial_result):
                 super().__init__(max_trials=max_trials, executions_per_trial=executions_per_trial, overwrite=True, directory="autotune", project_name="birdnet_analyzer")
@@ -303,7 +314,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
                 return histories
 
-        tuner = BirdNetTuner(x_train=x_train, y_train=y_train, max_trials=cfg.AUTOTUNE_TRIALS, executions_per_trial=cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL, on_trial_result=on_trial_result)
+        tuner = BirdNetTuner(x_train=x_train, y_train=y_train, x_val=x_val, y_val=y_val, max_trials=cfg.AUTOTUNE_TRIALS, executions_per_trial=cfg.AUTOTUNE_EXECUTIONS_PER_TRIAL, on_trial_result=on_trial_result)
         tuner.search()
         best_params = tuner.get_best_hyperparameters()[0]
         print("Best params: ")
@@ -336,6 +347,8 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         classifier,
         x_train,
         y_train,
+        x_val,
+        y_val,
         epochs=cfg.TRAIN_EPOCHS,
         batch_size=cfg.TRAIN_BATCH_SIZE,
         learning_rate=cfg.TRAIN_LEARNING_RATE,
@@ -369,7 +382,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a custom classifier with BirdNET")
-    parser.add_argument("--i", default="train_data/", help="Path to training data folder. Subfolder names are used as labels.")
+    parser.add_argument("--i", default="train_data/", help="Path to training data references.")
     parser.add_argument("--crop_mode", default="center", help="Crop mode for training data. Can be 'center', 'first' or 'segments'. Defaults to 'center'.")
     parser.add_argument("--crop_overlap", type=float, default=0.0, help="Overlap of training data segments in seconds if crop_mode is 'segments'. Defaults to 0.")
     parser.add_argument(
@@ -403,12 +416,6 @@ if __name__ == "__main__":
     parser.add_argument("--autotune_executions_per_trial", type=int, default=1, help="The number of times a training run with a set of hyperparameters is repeated during hyperparameter tuning (this reduces the variance). Defaults to 1.")
 
     args = parser.parse_args()
-
-    # while True:
-    #     print(f'--i {args.i}')
-    #     print(f'--o {args.o}')
-    #     print(f'--autotune {args.autotune}')
-    #     time.sleep(1)
 
     # Config
     cfg.TRAIN_DATA_PATH = args.i
