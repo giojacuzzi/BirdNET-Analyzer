@@ -3,60 +3,11 @@
 # TODO: REPLACE THIS WITH train.py in the root directory of the src repo
 if __name__ == "__main__":
 
-    training_data_path = 'data/training/Custom'
+    training_data_path = 'data/training'
     output_path = 'data/models/custom'
     test_set_size = 25
     development_set_size = 125
-
-    preexisting_labels_to_train = [
-        "american robin",
-        "band-tailed pigeon",
-        "barred owl",
-        "belted kingfisher",
-        "black-throated gray warbler",
-        "common raven",
-        "dark-eyed junco",
-        "golden-crowned kinglet",
-        "hairy woodpecker",
-        "hammond's flycatcher",
-        "hermit thrush",
-        "hutton's vireo",
-        "marbled murrelet",
-        "northern flicker",
-        "northern pygmy-owl",
-        "northern saw-whet owl",
-        "olive-sided flycatcher",
-        "pacific wren",
-        "pacific-slope flycatcher",
-        "pileated woodpecker",
-        "purple finch",
-        "red crossbill",
-        "red-breasted nuthatch",
-        "ruby-crowned kinglet",
-        "rufous hummingbird",
-        "song sparrow",
-        "sooty grouse",
-        "spotted towhee",
-        "swainson's thrush",
-        "townsend's warbler",
-        "varied thrush",
-        "violet-green swallow",
-        "western screech-owl",
-        "western tanager",
-        "western wood-pewee",
-        "white-crowned sparrow",
-        "wilson's warbler"
-    ]
-    novel_labels_to_train = [
-        "abiotic aircraft",
-        "abiotic logging",
-        "abiotic rain",
-        "abiotic vehicle",
-        "abiotic wind",
-        "biotic anuran",
-        "biotic insect"
-    ]
-    labels_to_train = preexisting_labels_to_train + novel_labels_to_train
+    # NOTE: Labels to train are specified in training_labels.csv
 
     import random
     import pandas as pd
@@ -64,6 +15,13 @@ if __name__ == "__main__":
     import os
     import sys
     import subprocess
+
+    # Load class labels
+    class_labels_csv_path = os.path.abspath(f'{training_data_path}/training_labels.csv')
+    class_labels = pd.read_csv(class_labels_csv_path)
+    preexisting_labels_to_train = list(class_labels[class_labels['novel'] == 0]['label_birdnet'])
+    novel_labels_to_train = list(class_labels[class_labels['novel'] == 1]['label_birdnet'])
+    labels_to_train = preexisting_labels_to_train + novel_labels_to_train
 
     # Prepare output directory
     os.makedirs(output_path, exist_ok=True)
@@ -84,38 +42,32 @@ if __name__ == "__main__":
     training_data_path = os.path.normpath(training_data_path)
 
     # Find all potential training files for all labels
-    training_data_audio_path = training_data_path + '/audio'
+    training_data_audio_path = training_data_path + '/custom/audio'
     print(f'Finding all audio data for model development from {training_data_audio_path}...')
     training_filepaths = []
     training_filepaths.extend(find_files(training_data_audio_path, '.wav'))
+
+    # print(list({os.path.dirname(path) for path in training_filepaths}))
+
     available_examples = pd.DataFrame()
     for path in training_filepaths:
-        dir   = os.path.basename(os.path.dirname(path))
-        label_tokens = dir.split('_')
-        label = label_tokens[1].lower() if len(label_tokens) == 2 else ''
-        if label not in labels_to_train:
-            continue
+        dir = os.path.basename(os.path.dirname(path))
         example = pd.DataFrame({
-            'label':  [label],
-            'folder': [os.path.basename(os.path.dirname(path))],
+            'source': [os.path.basename(os.path.dirname(path))],
             'file':   [os.path.basename(path)],
             'path':   [os.path.abspath(path)]
         })
         available_examples = pd.concat([available_examples, example], ignore_index=True)
 
-    # # Find all training annotations and associated audio data for all labels
-    # training_data_selections_path = training_data_path + '/selections'
-    # print(f'Finding all training annotation data and associated audio data from {training_data_selections_path}...')
-    # annotation_files = []
-    # annotation_files.extend(files.find_files(training_data_selections_path, '.txt')) 
-    # all_annotations = pd.DataFrame()
-    # for file in annotation_files:
-    #     example = files.load_raven_selection_table(file, cols_needed = ['label', 'file_audio'])
-    #     example['label_source'] = os.path.basename(os.path.dirname(file))
-    #     all_annotations = pd.concat([all_annotations, example], ignore_index=True)
-    # print(all_annotations.head().to_string())
+    # Load annotation labels for the training files and merge
+    annotations = pd.read_csv(f'{training_data_path}/training_data_annotations.csv')
+    annotations['file'] = annotations['file'] + '.wav'
+    # print(annotations)
+    available_examples = available_examples.merge(annotations[['source', 'file', 'labels']], on=['source', 'file'], how='left')
+    print(available_examples['source'].value_counts())
+    available_examples.loc[available_examples['source'] == 'Background', 'labels'] = 'Background' # manually label background examples
 
-    # training_annotations = all_annotations
+    # TODO: Remove annotation labels that are not being trained
 
     # DO NOT CHANGE
     # Never change this random seed to ensure unbiased evaluation of test data.
@@ -125,13 +77,15 @@ if __name__ == "__main__":
     print(f'Randomly choosing {test_set_size} examples for each novel label (N={len(novel_labels_to_train)}) as test data...')
     test_examples_novel = pd.DataFrame()
     for novel_label in novel_labels_to_train:
-        label_examples = available_examples[available_examples['label'] == novel_label]
+        if novel_label == 'Background': # skip the Background label
+            continue
+        label_examples = available_examples[available_examples['source'] == novel_label]
         # Randomly sample 25 examples
         label_sample = label_examples.sample(n=test_set_size, random_state=test_seed)
         test_examples_novel = pd.concat([test_examples_novel, label_sample], ignore_index=True)
         # Remove the samples from the training data
         available_examples = available_examples.drop(label_sample.index)
-    print(test_examples_novel['label'].value_counts())
+    # print(test_examples_novel['label'].value_counts())
 
     # Store test example filepaths
     test_files_csv_path = os.path.abspath(f'{output_path}/test_files.csv')
@@ -146,16 +100,16 @@ if __name__ == "__main__":
     # Create a development (train + validation) dataset by randomly choosing 125 examples (or, if less than 125 exist, as many as are available) from the total available for each label.
     print(f'Randomly choosing {development_set_size} examples for each label as development data...')
     development_examples = pd.DataFrame()
-    for label_to_train in labels_to_train:
+    for label_to_train in (labels_to_train + ['Background']):
         print(label_to_train)
-        label_examples = available_examples[available_examples['label'] == label_to_train]
+        label_examples = available_examples[available_examples['source'] == label_to_train]
         # Randomly sample 125 examples
         if len(label_examples) < development_set_size:
             print(f'WARNING: Less than {development_set_size} examples available for label {label_to_train}')
         label_sample = label_examples.sample(n=min(development_set_size, len(label_examples)), random_state=training_seed)
         development_examples = pd.concat([development_examples, label_sample], ignore_index=True)
     print(f'Found {len(development_examples)} total development examples')
-    print(development_examples['label'].value_counts())
+    print(development_examples['source'].value_counts())
 
     # TODO: For labels with fewer than 125 examples, apply data augmentation to artificially increase the number of examples to 125 (e.g. SMOTE).
 
@@ -166,13 +120,13 @@ if __name__ == "__main__":
     print(f'Randomly choosing {training_set_proportion * 100}/{validation_set_proportion * 100}% for each label as training/validation data...')
     validation_examples = pd.DataFrame()
     training_examples   = pd.DataFrame()
-    for label, group in development_examples.groupby('label'):
+    for label, group in development_examples.groupby('source'):
         label_validation = group.sample(frac=validation_set_proportion, random_state=training_seed)
         label_training   = group.drop(label_validation.index)
         validation_examples = pd.concat([validation_examples, label_validation]).reset_index(drop=True)
         training_examples   = pd.concat([training_examples, label_training]).reset_index(drop=True)
-    print(validation_examples['label'].value_counts())
-    print(training_examples['label'].value_counts())
+    print(validation_examples['source'].value_counts())
+    print(training_examples['source'].value_counts())
 
     # Store validation example filepaths
     validation_files_csv_path = os.path.abspath(f'{output_path}/validation_files.csv')
@@ -193,16 +147,16 @@ if __name__ == "__main__":
 
         # Randomly sample the required number of examples per label from the training data
         experiment_examples = pd.DataFrame()
-        for label, group in training_examples.groupby('label'):
-            label_examples = training_examples[training_examples['label'] == label]
+        for label, group in training_examples.groupby('source'):
+            label_examples = training_examples[training_examples['source'] == label]
             if len(label_examples) < experiment_sample_size:
                 print(f'WARNING: Less than {experiment_sample_size} examples available for label {label}')
                 # TODO: Apply data augmentation to artificially increase the number of examples (e.g. SMOTE)?
             label_training = group.sample(n=min(experiment_sample_size, len(label_examples)), random_state=training_seed)
             experiment_examples = pd.concat([experiment_examples, label_training]).reset_index(drop=True)
-        print(experiment_examples['label'].value_counts())
+        print(experiment_examples['source'].value_counts())
         experiment_examples = experiment_examples.sort_values(by=['path'])
-        print(experiment_examples.to_string())
+        # print(experiment_examples.to_string())
 
         # Store training filepaths
         training_files_csv_path = os.path.abspath(f'{output_path}/{model_id_stub}/training_files.csv')
@@ -223,7 +177,8 @@ if __name__ == "__main__":
         print(f'Training model {os.path.basename(file_model_out)} with {experiment_sample_size} examples ======================================================================================')
         command = [
             'python3', 'train_custom.py',
-            '--i', combined_files_csv_path, # Path to combined (training and validation) data references.
+            '--i', combined_files_csv_path, # Path to combined (training and validation) data references csv.
+            '--l', class_labels_csv_path, # Path to class labels csv.
             '--o', file_model_out, # File path to trained classifier model output.
             '--no-autotune' if not autotune else '--autotune' # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
         ]

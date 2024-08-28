@@ -99,45 +99,63 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     # print(train_files)
     # print(train_files['folder'].unique())
 
-    # DEBUG: 'folders' should contain a list of all subfolders as labels, e.g. 'Catharus guttatus_Hermit Thrush'
-    # Get list of subfolders as labels
-    # folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH))
-    folders = development_files['folder'].unique()
+    # # DEBUG: 'folders' should contain a list of all subfolders as labels, e.g. 'Catharus guttatus_Hermit Thrush'
+    # # Get list of subfolders as labels
+    # # folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH))
+    # folders = development_files['labels'].unique()
+    # folders = [str(element) for element in folders]
     # print('FOLDERS')
     # print(folders)
 
-    # DEBUG: 'labels' should contain a list of all BirdNET style labels, e.g. 'Catharus guttatus_Hermit Thrush'
-    # TODO: Get labels from a labels column that may contain multiple separated by ',' instead of the directory names here
-    # Read all individual labels from the folder names
-    labels = []
+    # # DEBUG: 'labels' should contain a list of all BirdNET style labels, e.g. 'Catharus guttatus_Hermit Thrush'
+    # # TODO: Get labels from a labels column that may contain multiple separated by ',' instead of the directory names here
+    # # Read all individual labels from the folder names
+    # labels = []
 
-    for folder in folders:
-        labels_in_folder = folder.split(',')
-        for label in labels_in_folder:
-            if not label in labels:
-                labels.append(label)
+    # for folder in folders:
+    #     labels_in_folder = folder.split(',')
+    #     for label in labels_in_folder:
+    #         if not label in labels:
+    #             labels.append(label)
 
-    # Sort labels
-    labels = list(sorted(labels))
+    # # Sort labels
+    # labels = list(sorted(labels))
 
-    # print('LABELS')
-    # print(labels)
+    # # print('LABELS')
+    # # print(labels)
 
-    # Get valid labels
-    valid_labels = [l for l in labels if not l.lower() in cfg.NON_EVENT_CLASSES and not l.startswith("-")] 
+    # # Get valid labels
+    # valid_labels = [l for l in labels if not l.lower() in cfg.NON_EVENT_CLASSES and not l.startswith("-")]
+
+    print('VALID LABELS')
+    valid_labels = pd.read_csv(cfg.TRAIN_LABELS_PATH)
+    valid_labels = sorted(list(valid_labels['label_birdnet']))
+    valid_labels = [str(element) for element in valid_labels]
+    print(valid_labels)
+
+    print('ALL ANNOTATED LABELS')
+    all_labels = []
+    label_combinations = development_files['labels'].unique()
+    for combo in label_combinations:
+        labels = combo.split(', ')
+        for label in labels:
+            if not label in all_labels:
+                all_labels.append(str(label))
+    all_labels = list(sorted(all_labels))
+    print(all_labels)
 
     # Check if binary classification
     cfg.BINARY_CLASSIFICATION = len(valid_labels) == 1
 
     # Validate the classes for binary classification
     if cfg.BINARY_CLASSIFICATION:
-        if len([l for l in folders if l.startswith("-")]) > 0:
+        if len([l for l in all_labels if l.startswith("-")]) > 0:
             raise Exception("Negative labels cant be used with binary classification")
-        if len([l for l in folders if l.lower() in cfg.NON_EVENT_CLASSES]) == 0:
+        if len([l for l in all_labels if l.lower() in cfg.NON_EVENT_CLASSES]) == 0:
             raise Exception("Non-event samples are required for binary classification")
 
     # Check if multi label
-    cfg.MULTI_LABEL = len(valid_labels) > 1 and any(',' in f for f in folders)
+    cfg.MULTI_LABEL = len(valid_labels) > 1 and any(',' in f for f in label_combinations)
 
     # Check if multi-label and binary classficication 
     if cfg.BINARY_CLASSIFICATION and cfg.MULTI_LABEL:
@@ -154,30 +172,31 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     x_val = []
     y_val = []
 
-    for folder in folders:
-        print(f'Loading data for {folder}...')
+    for label_combo in label_combinations:
+        print(f'Loading data for {label_combo}...')
 
         # Get label vector
         label_vector = np.zeros((len(valid_labels),), dtype="float32")
 
-        folder_labels = folder.split(',')
+        combo_labels = label_combo.split(', ')
 
-        for label in folder_labels:
-            if not label.lower() in cfg.NON_EVENT_CLASSES and not label.startswith("-"):
+        for label in combo_labels:
+            if (not label.lower() in cfg.NON_EVENT_CLASSES) and (not label.startswith("-")) and label in valid_labels:
                 label_vector[valid_labels.index(label)] = 1
             elif label.startswith("-") and label[1:] in valid_labels: # Negative labels need to be contained in the valid labels
                 label_vector[valid_labels.index(label[1:])] = -1
+            # Note that labels that are not included in valid_labels will be ignored
 
         # Load training files using thread pool  
         print('Load training files using thread pool...')    
-        train_files_to_load = train_files[train_files['folder'] == folder]['path'] 
+        train_files_to_load = train_files[train_files['labels'] == label_combo]['path'] 
         with Pool(cfg.CPU_THREADS) as p:
             tasks = []
             for f in train_files_to_load:
                 task = p.apply_async(partial(_loadAudioFile, f=f, label_vector=label_vector, config=cfg.getConfig()))
                 tasks.append(task)
             num_files_processed = 0 # Wait for tasks to complete and monitor progress with tqdm
-            with tqdm.tqdm(total=len(tasks), desc=f" - loading '{folder}'", unit='f') as progress_bar:
+            with tqdm.tqdm(total=len(tasks), desc=f" - loading '{label_combo}'", unit='f') as progress_bar:
                 for task in tasks:
                     result = task.get()
                     x_train += result[0]
@@ -185,18 +204,18 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     num_files_processed += 1
                     progress_bar.update(1)
                     if progress_callback:
-                        progress_callback(num_files_processed, len(tasks), folder)
+                        progress_callback(num_files_processed, len(tasks), label_combo)
 
         # Load validation files using thread pool  
         print('Load validation files using thread pool...')    
-        val_files_to_load = validation_files[validation_files['folder'] == folder]['path'] 
+        val_files_to_load = validation_files[validation_files['labels'] == label_combo]['path'] 
         with Pool(cfg.CPU_THREADS) as p:
             tasks = []
             for f in val_files_to_load:
                 task = p.apply_async(partial(_loadAudioFile, f=f, label_vector=label_vector, config=cfg.getConfig()))
                 tasks.append(task)
             num_files_processed = 0 # Wait for tasks to complete and monitor progress with tqdm
-            with tqdm.tqdm(total=len(tasks), desc=f" - loading '{folder}'", unit='f') as progress_bar:
+            with tqdm.tqdm(total=len(tasks), desc=f" - loading '{label_combo}'", unit='f') as progress_bar:
                 for task in tasks:
                     result = task.get()
                     x_val += result[0]
@@ -204,7 +223,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     num_files_processed += 1
                     progress_bar.update(1)
                     if progress_callback:
-                        progress_callback(num_files_processed, len(tasks), folder)
+                        progress_callback(num_files_processed, len(tasks), label_combo)
     
     # Convert to numpy arrays
     x_train = np.array(x_train, dtype="float32")
@@ -383,6 +402,7 @@ if __name__ == "__main__":
     # Parse arguments
     parser = argparse.ArgumentParser(description="Train a custom classifier with BirdNET")
     parser.add_argument("--i", default="train_data/", help="Path to training data references.")
+    parser.add_argument("--l", default="train_data/", help="Path to training data labels csv.")
     parser.add_argument("--crop_mode", default="center", help="Crop mode for training data. Can be 'center', 'first' or 'segments'. Defaults to 'center'.")
     parser.add_argument("--crop_overlap", type=float, default=0.0, help="Overlap of training data segments in seconds if crop_mode is 'segments'. Defaults to 0.")
     parser.add_argument(
@@ -419,6 +439,7 @@ if __name__ == "__main__":
 
     # Config
     cfg.TRAIN_DATA_PATH = args.i
+    cfg.TRAIN_LABELS_PATH = args.l
     cfg.SAMPLE_CROP_MODE = args.crop_mode
     cfg.SIG_OVERLAP = args.crop_overlap
     cfg.CUSTOM_CLASSIFIER = args.o

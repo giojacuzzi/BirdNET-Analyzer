@@ -124,6 +124,9 @@ SKIP_EXISTING_RESULTS: bool = False
 # Training data path
 TRAIN_DATA_PATH: str = "train_data/"
 
+# Training labels path
+TRAIN_LABELS_PATH: str = "train_data/"
+
 # Sample crop mode
 SAMPLE_CROP_MODE: str = "center"
 
