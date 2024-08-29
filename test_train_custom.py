@@ -5,8 +5,12 @@ if __name__ == "__main__":
 
     training_data_path = 'data/training'
     output_path = 'data/models/custom'
-    test_set_size = 25
-    development_set_size = 125
+
+    sample_size_experiments = [50] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
+    autotune = 1 # TODO: run another loop with autotune
+
+    test_set_size = 25 # for novel labels (25)
+    development_set_size = 125 # training + validation total (125)
     # NOTE: Labels to train are specified in training_labels.csv
 
     import random
@@ -15,10 +19,12 @@ if __name__ == "__main__":
     import os
     import sys
     import subprocess
+    import copy
 
     # Load class labels
     class_labels_csv_path = os.path.abspath(f'{training_data_path}/training_labels.csv')
     class_labels = pd.read_csv(class_labels_csv_path)
+    class_labels = class_labels[class_labels['train'] == 1]
     preexisting_labels_to_train = list(class_labels[class_labels['novel'] == 0]['label_birdnet'])
     novel_labels_to_train = list(class_labels[class_labels['novel'] == 1]['label_birdnet'])
     labels_to_train = preexisting_labels_to_train + novel_labels_to_train
@@ -59,15 +65,12 @@ if __name__ == "__main__":
         })
         available_examples = pd.concat([available_examples, example], ignore_index=True)
 
-    # Load annotation labels for the training files and merge
+    # Load annotation labels for the training files and merge, retaining only those that match the available examples
     annotations = pd.read_csv(f'{training_data_path}/training_data_annotations.csv')
     annotations['file'] = annotations['file'] + '.wav'
-    # print(annotations)
     available_examples = available_examples.merge(annotations[['source', 'file', 'labels']], on=['source', 'file'], how='left')
-    print(available_examples['source'].value_counts())
+    # print(available_examples['source'].value_counts())
     available_examples.loc[available_examples['source'] == 'Background', 'labels'] = 'Background' # manually label background examples
-
-    # TODO: Remove annotation labels that are not being trained
 
     # DO NOT CHANGE
     # Never change this random seed to ensure unbiased evaluation of test data.
@@ -102,19 +105,17 @@ if __name__ == "__main__":
     development_examples = pd.DataFrame()
     for label_to_train in (labels_to_train + ['Background']):
         print(label_to_train)
-        label_examples = available_examples[available_examples['source'] == label_to_train]
+        label_examples = available_examples[available_examples['source'] == label_to_train] # TODO: available_examples[available_examples['labels'].str.contains(label_to_train, regex=False)]
         # Randomly sample 125 examples
         if len(label_examples) < development_set_size:
             print(f'WARNING: Less than {development_set_size} examples available for label {label_to_train}')
         label_sample = label_examples.sample(n=min(development_set_size, len(label_examples)), random_state=training_seed)
         development_examples = pd.concat([development_examples, label_sample], ignore_index=True)
     print(f'Found {len(development_examples)} total development examples')
-    print(development_examples['source'].value_counts())
-
-    # TODO: For labels with fewer than 125 examples, apply data augmentation to artificially increase the number of examples to 125 (e.g. SMOTE).
 
     # Split development data into 20% validation data (25 examples for labels with 125 total) and 80% training data (100 examples for labels with 125 total).
     # This validation data will be used across all model experiments
+    # TODO: do this as above on the raw label, not the source
     training_set_proportion = 0.80
     validation_set_proportion = round(1.0 - training_set_proportion, 2)
     print(f'Randomly choosing {training_set_proportion * 100}/{validation_set_proportion * 100}% for each label as training/validation data...')
@@ -128,18 +129,47 @@ if __name__ == "__main__":
     print(validation_examples['source'].value_counts())
     print(training_examples['source'].value_counts())
 
+    # TODO:
+    # # Find the majority and minority classes (i.e. value_couts across all labels present in available_examples)
+    # def class_imbalance_test(df_in, print_out=False):
+    #     print('Finding majority and minority classes from label value counts...')
+    #     df = copy.deepcopy(df_in)
+    #     df['labels'] = df['labels'].str.split(', ')
+    #     df = df.explode('labels')
+    #     label_counts = df['labels'].value_counts()
+    #     label_counts = label_counts[label_counts.index.isin(labels_to_train)]
+    #     max_count = label_counts.max()
+    #     min_count = label_counts.min()
+    #     max_labels = label_counts[label_counts == max_count].index.tolist()
+    #     min_labels = label_counts[label_counts == min_count].index.tolist()
+    #     if print_out:
+    #         print(label_counts.to_string())
+    #         print(f"Majority classes  (N={max_count}): {', '.join(max_labels)}")
+    #         print(f"Miniority classes (N={min_count}): {', '.join(min_labels)}")
+    #         print(f"Class imbalance ratio ({max_count}/{min_count}): {round(max_count/min_count,2)}")
+    #     return(label_counts)
+
+    # class_counts = class_imbalance_test(development_examples)
+
+    # # For labels with fewer than 125 examples, apply data augmentation to artificially increase the number of examples via repeat.
+    # labels_to_augment = class_counts[class_counts < development_set_size].index.tolist()
+    # for label_to_augment in labels_to_augment:
+    #     label_examples = available_examples[available_examples['labels'].str.contains(label_to_augment, regex=False)]
+    #     n = development_set_size - len(label_examples)
+    #     print(f'Augmenting {label_to_augment} (N={len(label_examples)}) with {n} random repeats...')
+    #     label_sample = label_examples.sample(n=n, replace=True, random_state=training_seed)
+    #     development_examples = pd.concat([development_examples, label_sample], ignore_index=True) # add to development_examples
+
+    # class_counts = class_imbalance_test(development_examples, print_out=True)
+
     # Store validation example filepaths
     validation_files_csv_path = os.path.abspath(f'{output_path}/validation_files.csv')
     validation_examples.to_csv(validation_files_csv_path, index=False)
-
-    # Define sample size experiments for model development
-    sample_size_experiments = [100]
 
     # For each experiment (2,5,10,25,50,100 training examples)...
     for experiment_sample_size in sample_size_experiments:
         print(f'Running model development with {experiment_sample_size} training samples...')
 
-        autotune = 0 # TODO: run another loop with autotune
         model_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}'
         path_model_out = f'{os.getcwd()}/{output_path}/{model_id_stub}'
         file_model_out = f'{path_model_out}/{model_id_stub}.tflite'
@@ -202,7 +232,7 @@ if __name__ == "__main__":
     # ========================================================================================================================================================================================================
     # TRAIN WITH 5-FOLD CROSS VALIDATION
     # - Set a random seed
-    # - Create a development (train + validation) dataset by randomly choosing 125 examples (or, if less than 125 exist, as many as are available) from the total available for each label.
+    # - Create a development dataset (train + validation) by randomly choosing 125 examples (or, if less than 125 exist, as many as are available) from the total available for each label.
     # - For labels with fewer than 125 examples, choose all available examples for training, then apply data augmentation to artificially increase the number of examples to 125 (e.g. SMOTE).
     # - Split this 125 into 5 randomly-chosen folds of validation data (25 examples for labels with 125 total) and training data (100 examples for labels with 125 total) with a 80/20 split, each fold being of size 25:
     # 	V T T T T

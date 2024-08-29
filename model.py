@@ -208,14 +208,12 @@ def trainLinearClassifier(
     # Set random seed
     np.random.seed(cfg.RANDOM_SEED)
 
-    print('x_train')
-    print(x_train)
-    print('y_train')
-    print(y_train)
-    print('x_val')
-    print(x_val)
-    print('y_val')
-    print(y_val)
+    print(f'batch_size {batch_size}')
+    print(f'learning_rate {learning_rate}')
+    print(f'upsampling_ratio {upsampling_ratio}')
+    print(f'upsampling_mode {upsampling_mode}')
+    print(f'train_with_mixup {train_with_mixup}')
+    print(f'train_with_label_smoothing {train_with_label_smoothing}')
 
     print(
         f"Training on {x_train.shape[0]} samples, validating on {x_val.shape[0]} samples.",

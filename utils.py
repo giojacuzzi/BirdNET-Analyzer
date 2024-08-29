@@ -294,8 +294,11 @@ def mixup(x, y, augmentation_ratio=0.25, alpha=0.2):
         # Mark the sample as already mixed up
         mixed_up_indices.append(index)
 
-    del mixed_x
-    del mixed_y
+    if num_samples_to_augment > 0:
+        del mixed_x
+        del mixed_y
+    else:
+        print(f'MANGO: {num_samples_to_augment} samples to augment from {len(positive_indices)} positive indices and ratio {augmentation_ratio}')
 
     return x, y
 
@@ -353,6 +356,10 @@ def upsampling(x, y, ratio=0.5, mode="repeat"):
         else:
             # For each class with less than min_samples ranomdly repeat samples
             for i in range(y.shape[1]):
+                if not np.any(y[:, i] == 1):
+                    print(f'MANGO: Could not find positive example to upsample for class {i}!')
+                    continue
+
                 while y[:, i].sum() + len(y_temp) < min_samples:
                     # Randomly choose a sample from the minority class
                     random_index = np.random.choice(np.where(y[:, i] == 1)[0])

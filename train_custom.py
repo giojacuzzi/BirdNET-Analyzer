@@ -129,9 +129,11 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
 
     print('VALID LABELS')
     valid_labels = pd.read_csv(cfg.TRAIN_LABELS_PATH)
+    valid_labels = valid_labels[valid_labels['train'] == 1]
     valid_labels = sorted(list(valid_labels['label_birdnet']))
     valid_labels = [str(element) for element in valid_labels]
-    print(valid_labels)
+    for index, element in enumerate(valid_labels):
+        print(f"{index} {element}")
 
     print('ALL ANNOTATED LABELS')
     all_labels = []
@@ -187,9 +189,9 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                 label_vector[valid_labels.index(label[1:])] = -1
             # Note that labels that are not included in valid_labels will be ignored
 
-        # Load training files using thread pool  
-        print('Load training files using thread pool...')    
-        train_files_to_load = train_files[train_files['labels'] == label_combo]['path'] 
+        # Load training files using thread pool    
+        train_files_to_load = train_files[train_files['labels'] == label_combo]['path']
+        print(f'Loading {len(train_files_to_load)} training files using thread pool...')  
         with Pool(cfg.CPU_THREADS) as p:
             tasks = []
             for f in train_files_to_load:
@@ -206,9 +208,9 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     if progress_callback:
                         progress_callback(num_files_processed, len(tasks), label_combo)
 
-        # Load validation files using thread pool  
-        print('Load validation files using thread pool...')    
-        val_files_to_load = validation_files[validation_files['labels'] == label_combo]['path'] 
+        # Load validation files using thread pool
+        val_files_to_load = validation_files[validation_files['labels'] == label_combo]['path']
+        print(f'Loading {len(val_files_to_load)} validation files using thread pool...')     
         with Pool(cfg.CPU_THREADS) as p:
             tasks = []
             for f in val_files_to_load:
@@ -272,10 +274,12 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
 
         # TODO: SUPPORT VALIDATION FOR AUTOTUNE
         class BirdNetTuner(keras_tuner.BayesianOptimization):
-            def __init__(self, x_train, y_train, max_trials, executions_per_trial, on_trial_result):
+            def __init__(self, x_train, y_train, x_val, y_val, max_trials, executions_per_trial, on_trial_result):
                 super().__init__(max_trials=max_trials, executions_per_trial=executions_per_trial, overwrite=True, directory="autotune", project_name="birdnet_analyzer")
                 self.x_train = x_train
                 self.y_train = y_train
+                self.x_val = x_val
+                self.y_val = y_val
                 self.on_trial_result = on_trial_result
 
             def run_trial(self, trial, *args, **kwargs):
@@ -305,13 +309,15 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
                         classifier,
                         self.x_train,
                         self.y_train,
+                        self.x_val,
+                        self.y_val,
                         epochs=cfg.TRAIN_EPOCHS,
                         batch_size=hp.Choice("batch_size", [8, 16, 32, 64, 128], default=cfg.TRAIN_BATCH_SIZE),
                         learning_rate=hp.Choice("learning_rate", [0.1, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001], default=cfg.TRAIN_LEARNING_RATE),
                         val_split=cfg.TRAIN_VAL_SPLIT,
-                        upsampling_ratio=hp.Choice("upsampling_ratio",[0.0, 0.25, 0.33, 0.5, 0.75, 1.0], default=cfg.UPSAMPLING_RATIO),
+                        upsampling_ratio=hp.Choice("upsampling_ratio",[0.0], default=cfg.UPSAMPLING_RATIO), # 0.0, 0.25, 0.33, 0.5, 0.75, 1.0
                         upsampling_mode=hp.Choice("upsampling_mode", upsampling_choices, default=cfg.UPSAMPLING_MODE), 
-                        train_with_mixup=hp.Boolean("mixup", default=cfg.TRAIN_WITH_MIXUP),
+                        train_with_mixup=False, # hp.Boolean("mixup", default=cfg.TRAIN_WITH_MIXUP),
                         train_with_label_smoothing=hp.Boolean("label_smoothing", default=cfg.TRAIN_WITH_LABEL_SMOOTHING),
                     )
 
@@ -343,7 +349,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         print("learning_rate: ", best_params["learning_rate"])
         print("upsampling_mode: ", best_params["upsampling_mode"])
         print("upsampling_ratio: ", best_params["upsampling_ratio"])
-        print("mixup: ", best_params["mixup"])
+        # print("mixup: ", best_params["mixup"])
         print("label_smoothing: ", best_params["label_smoothing"])
         cfg.TRAIN_HIDDEN_UNITS = best_params["hidden_units"]
         cfg.TRAIN_DROPOUT = best_params["dropout"]
@@ -351,7 +357,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         cfg.TRAIN_LEARNING_RATE = best_params["learning_rate"]
         cfg.UPSAMPLING_MODE = best_params["upsampling_mode"]
         cfg.UPSAMPLING_RATIO = best_params["upsampling_ratio"]
-        cfg.TRAIN_WITH_MIXUP = best_params["mixup"]
+        # cfg.TRAIN_WITH_MIXUP = best_params["mixup"]
         cfg.TRAIN_WITH_LABEL_SMOOTHING = best_params["label_smoothing"]
         
 
