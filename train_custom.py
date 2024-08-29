@@ -174,6 +174,8 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     x_val = []
     y_val = []
 
+    n_train_files_loaded = 0
+    n_val_files_loaded = 0
     for label_combo in label_combinations:
         print(f'Loading data for {label_combo}...')
 
@@ -207,6 +209,8 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     progress_bar.update(1)
                     if progress_callback:
                         progress_callback(num_files_processed, len(tasks), label_combo)
+        n_train_files_loaded = n_train_files_loaded + len(train_files_to_load)
+        print(f'{n_train_files_loaded}/{len(train_files)} ({n_train_files_loaded/len(train_files) * 100}%) training files loaded')
 
         # Load validation files using thread pool
         val_files_to_load = validation_files[validation_files['labels'] == label_combo]['path']
@@ -226,6 +230,8 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     progress_bar.update(1)
                     if progress_callback:
                         progress_callback(num_files_processed, len(tasks), label_combo)
+        n_val_files_loaded = n_val_files_loaded + len(val_files_to_load)
+        print(f'{n_val_files_loaded}/{len(validation_files)} ({round(n_val_files_loaded/len(validation_files) * 100,2)}%) validation files loaded')
     
     # Convert to numpy arrays
     x_train = np.array(x_train, dtype="float32")
