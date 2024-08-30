@@ -6,12 +6,12 @@ if __name__ == "__main__":
     training_data_path = 'data/training'
     output_path = 'data/models/custom'
 
-    sample_size_experiments = [5] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
+    sample_size_experiments = [100] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
     autotune = 0 # TODO: run another loop with autotune
 
-    data_augmentation = False # TODO: Support augmentation
+    data_augmentation = 0 # TODO: Support augmentation
 
-    upsample = True
+    upsample = 0
 
     test_set_size = 25 # for novel labels (25)
     development_set_size = 125 # training + validation total (125)
@@ -94,9 +94,9 @@ if __name__ == "__main__":
         available_examples = available_examples.drop(sampled_rows.index) # Remove the samples from the training data
     # print(test_examples_novel['label'].value_counts())
 
-    # Store test example filepaths
-    test_files_csv_path = os.path.abspath(f'{output_path}/test_files.csv')
-    test_examples_novel.to_csv(test_files_csv_path, index=False)
+    # # Store test example filepaths
+    # test_files_csv_path = os.path.abspath(f'{output_path}/test_files.csv')
+    # test_examples_novel.to_csv(test_files_csv_path, index=False)
 
     # Find the majority and minority classes (i.e. value_couts across all labels present in available_examples)
     def class_imbalance_test(df_in, print_out=False):
@@ -166,17 +166,17 @@ if __name__ == "__main__":
         print('VALIDATION EXAMPLES:')
         class_counts = class_imbalance_test(validation_examples, print_out=True)
 
-        # Store validation example filepaths
-        validation_files_csv_path = os.path.abspath(f'{output_path}/validation_files.csv')
-        validation_examples.to_csv(validation_files_csv_path, index=False)
+        # # Store validation example filepaths
+        # validation_files_csv_path = os.path.abspath(f'{output_path}/validation_files.csv')
+        # validation_examples.to_csv(validation_files_csv_path, index=False)
 
         # For each experiment (2,5,10,25,50,100 training examples)...
         for experiment_sample_size in sample_size_experiments:
             print(f'Running model development with {experiment_sample_size} training samples...')
 
-            model_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}'
-            path_model_out = f'{os.getcwd()}/{output_path}/{model_id_stub}'
-            file_model_out = f'{path_model_out}/{model_id_stub}.tflite'
+            model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}'
+            path_model_out = f'{os.getcwd()}/{output_path}/{model_iteration_id_stub}'
+            file_model_out = f'{path_model_out}/{model_iteration_id_stub}.tflite'
             os.makedirs(path_model_out, exist_ok=True)
 
             # Randomly sample the required number of examples per label from the training data
@@ -207,12 +207,12 @@ if __name__ == "__main__":
             experiment_examples = experiment_examples.sort_values(by=['path'])
             # print(experiment_examples.to_string())
 
-            # Store training filepaths
-            training_files_csv_path = os.path.abspath(f'{output_path}/{model_id_stub}/training_files.csv')
-            experiment_examples.to_csv(training_files_csv_path, index=False)
+            # # Store training filepaths
+            # training_files_csv_path = os.path.abspath(f'{output_path}/{model_iteration_id_stub}/training_files.csv')
+            # experiment_examples.to_csv(training_files_csv_path, index=False)
 
             # Store combined training and validation filepaths
-            combined_files_csv_path = os.path.abspath(f'{output_path}/{model_id_stub}/combined_files.csv')
+            combined_files_csv_path = os.path.abspath(f'{output_path}/{model_iteration_id_stub}/combined_files.csv')
             experiment_examples['dataset'] = 'training'
             validation_examples['dataset'] = 'validation'
             combined_examples = pd.concat([experiment_examples, validation_examples], axis=0)
@@ -236,7 +236,7 @@ if __name__ == "__main__":
             print('cd src/submodules/BirdNET-Analyzer')
             print(" ".join(command))
             print()
-            print(f'Afterwards, execute test_compare_validation_performance.py with model {model_id_stub} to evaluate performance.')
+            print(f'Afterwards, execute test_compare_validation_performance.py with model {model_iteration_id_stub} to evaluate performance.')
 
             # Run the script with arguments
             # process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -268,89 +268,91 @@ if __name__ == "__main__":
         # Iterative stratification http://lpis.csd.auth.gr/publications/sechidis-ecmlpkdd-2011.pdf
         # Split the development dataset into k roughly equally-sized folds, ensuring that each fold has approximately the same class distribution as the original dataset
         # The splitting is done in such a way that each fold preserves the percentage of samples for each class as observed in the original dataset.
-        print('BEGINNING ITERATIVE STRATIFICATION')
-
         # Input: A set of instances, D, annotated with a set of labels L = {λ1, ..., λq}, desired number of subsets k, desired proportion of examples in each subset, r1, . . . rk (e.g. in 10-fold CV k = 10, rj = 0.1, j = 1...10)
-        d = development_examples
-        d['L'] = d['labels'].str.split(", ")
+        def iterative_stratification(d, k):
+
+            d = development_examples
+            d['L'] = d['labels'].str.split(", ")
+
+            # Calculate the desired number of examples cj at each subset (fold) Sj by multiplying the number of examples, |D|, with the desired proportion for this subset (fold) rj
+            c = evenly_distribute_n_into_parts(len(d), k)
+            print(f'Desired number of total samples for each fold: {c}')
+            
+            # Calculate the desired number of examples of each label λl at each subset (fold) Sj, clj, by multiplying the number of examples annotated with that label, |Dl|, with the desired proportion for this subset rj (i.e. according to the proportion of examples of the label in the initial set).  Note that both cj and clj will most often be decimal numbers.
+            cl = pd.DataFrame(columns=['label', 'clj'])
+            for l in labels:
+                dl = d[d['L'].apply(lambda x: l in x)] # get all examples of the label
+                clj = evenly_distribute_n_into_parts(len(dl), k)
+                cl = pd.concat([cl, pd.DataFrame({'label': [l], 'clj': [clj]})], axis=0)
+            print('Desired number of samples for each label:')
+            print(cl.to_string())
+
+            # The algorithm will finish as soon as the original dataset gets empty
+            d['fold'] = -1 # initialize all examples to be unassigned to a fold
+            while (-1 in d['fold'].values):
+                # Find the label with the fewest (but at least one) remaining examples, breaking ties randomly. It examines one label in each iteration, the one with the fewest remaining examples, denoted l.
+                label_counts = class_imbalance_test(d[d['fold'] == -1])
+                print(label_counts)
+                # input()
+                min_count_labels = label_counts[label_counts == label_counts.min()].index.tolist()
+                # print(min_count_labels)
+                l = random.choice(min_count_labels)
+                print(f'Distributing: {l}')
+
+                # Then, for each example (x, Y ) of this label dl, the algorithm selects an appropriate subset (fold) for distribution. The first criterion for subset (fold) selection is the current desired number of examples for this label clj. The subset (fold) that maximizes it gets selected.
+                dl = d[d['L'].apply(lambda x: l in x)] # get all examples of the label
+                dl = dl[dl['fold'] == -1] # get only examples that have yet to be assigned to a fold
+                # print(f'dl {dl.to_string()}')
+                for index, example in dl.iterrows():
+                    # print(f'{example}')
+
+                    # Select a fold for distribution of the sample, prioritizing the fold with the maximum number of remaining desired examples of this label
+                    clj = cl[cl['label'] == l]['clj'].iloc[0]
+                    max_clj_idx = [i for i, v in enumerate(clj) if v == max(clj)]
+                    
+                    # TODO: In case of ties, then among the tying subsets (folds), the one with the highest number of desired examples cj get selected.  Further ties are broken randomly 
+                    if len(max_clj_idx) > 1:
+                        # print(f"Tie detected for label '{l}' at indices {max_clj_idx}.")
+                        # Among the tying subsets (folds), the one with the highest number of desired examples cj get selected
+                        # print(c)
+                        max_c_idx = [i for i, v in enumerate(c) if v == max(c)]
+                        if len(max_c_idx) > 1:
+                            # print(f"Tie detected for folds {max_c_idx}.")
+                            m = random.choice(max_clj_idx)
+                            # print(f"Randomly selected index: {m}")
+                        else:
+                            m = max_c_idx[0]
+                            # print(f"Selected fold priority index: {m}")
+
+                    else:
+                        m = max_clj_idx[0]
+                        # print(f"Selected label priority index: {m}")
+                    
+                    # If the selected fold no longer desires more examples overall (although it may desire more of this specific label),
+                    # choose the fold that desires the most examples overall instead
+                    if c[m] == 0:
+                        max_c_idx = [i for i, v in enumerate(c) if v == max(c)]
+                        if len(max_c_idx) > 1:
+                            m = random.choice(max_c_idx)
+                        else:
+                            m = max_c_idx[0]
+
+                    # Once the appropriate subset, m, is selected, we add the example (x, Y ) to Sm and remove it from D.
+                    d.loc[index, 'fold'] = m
+
+                    # TODO: In the end of the iteration, we decrement the number of desired examples for each label of this example at subset m, cim, as well as the total number of desired examples for subset m, cm
+                    cl[cl['label'] == l]['clj'].iloc[0][m] -= 1
+                    c[m] -= 1
+
+                print(d[d['L'].apply(lambda x: l in x)]['fold'].value_counts())
+                print(f'Remaining desired number of total samples for each fold: {c}')
+
+            return(d)
+
+        print('BEGINNING ITERATIVE STRATIFICATION')
         k = 5
-        r = 1/k
-
-        # Calculate the desired number of examples cj at each subset (fold) Sj by multiplying the number of examples, |D|, with the desired proportion for this subset (fold) rj
-        c = evenly_distribute_n_into_parts(len(d), k)
-        print(f'Desired number of total samples for each fold: {c}')
-        
-        # Calculate the desired number of examples of each label λl at each subset (fold) Sj, clj, by multiplying the number of examples annotated with that label, |Dl|, with the desired proportion for this subset rj (i.e. according to the proportion of examples of the label in the initial set).  Note that both cj and clj will most often be decimal numbers.
-        cl = pd.DataFrame(columns=['label', 'clj'])
-        for l in labels:
-            dl = d[d['L'].apply(lambda x: l in x)] # get all examples of the label
-            clj = evenly_distribute_n_into_parts(len(dl), k)
-            cl = pd.concat([cl, pd.DataFrame({'label': [l], 'clj': [clj]})], axis=0)
-        print('Desired number of samples for each label:')
-        print(cl.to_string())
-
-        # The algorithm will finish as soon as the original dataset gets empty
-        d['fold'] = -1 # initialize all examples to be unassigned to a fold
-        while (-1 in d['fold'].values):
-            # Find the label with the fewest (but at least one) remaining examples, breaking ties randomly. It examines one label in each iteration, the one with the fewest remaining examples, denoted l.
-            label_counts = class_imbalance_test(d[d['fold'] == -1])
-            print(label_counts)
-            # input()
-            min_count_labels = label_counts[label_counts == label_counts.min()].index.tolist()
-            # print(min_count_labels)
-            l = random.choice(min_count_labels)
-            print(f'Distributing: {l}')
-
-            # Then, for each example (x, Y ) of this label dl, the algorithm selects an appropriate subset (fold) for distribution. The first criterion for subset (fold) selection is the current desired number of examples for this label clj. The subset (fold) that maximizes it gets selected.
-            dl = d[d['L'].apply(lambda x: l in x)] # get all examples of the label
-            dl = dl[dl['fold'] == -1] # get only examples that have yet to be assigned to a fold
-            # print(f'dl {dl.to_string()}')
-            for index, example in dl.iterrows():
-                # print(f'{example}')
-
-                # Select a fold for distribution of the sample, prioritizing the fold with the maximum number of remaining desired examples of this label
-                clj = cl[cl['label'] == l]['clj'].iloc[0]
-                max_clj_idx = [i for i, v in enumerate(clj) if v == max(clj)]
-                
-                # TODO: In case of ties, then among the tying subsets (folds), the one with the highest number of desired examples cj get selected.  Further ties are broken randomly 
-                if len(max_clj_idx) > 1:
-                    # print(f"Tie detected for label '{l}' at indices {max_clj_idx}.")
-                    # Among the tying subsets (folds), the one with the highest number of desired examples cj get selected
-                    # print(c)
-                    max_c_idx = [i for i, v in enumerate(c) if v == max(c)]
-                    if len(max_c_idx) > 1:
-                        # print(f"Tie detected for folds {max_c_idx}.")
-                        m = random.choice(max_clj_idx)
-                        # print(f"Randomly selected index: {m}")
-                    else:
-                        m = max_c_idx[0]
-                        # print(f"Selected fold priority index: {m}")
-
-                else:
-                    m = max_clj_idx[0]
-                    # print(f"Selected label priority index: {m}")
-                
-                # If the selected fold no longer desires more examples overall (although it may desire more of this specific label),
-                # choose the fold that desires the most examples overall instead
-                if c[m] == 0:
-                    max_c_idx = [i for i, v in enumerate(c) if v == max(c)]
-                    if len(max_c_idx) > 1:
-                        m = random.choice(max_c_idx)
-                    else:
-                        m = max_c_idx[0]
-
-                # Once the appropriate subset, m, is selected, we add the example (x, Y ) to Sm and remove it from D.
-                d.loc[index, 'fold'] = m
-
-                # TODO: In the end of the iteration, we decrement the number of desired examples for each label of this example at subset m, cim, as well as the total number of desired examples for subset m, cm
-                cl[cl['label'] == l]['clj'].iloc[0][m] -= 1
-                c[m] -= 1
-
-            print(d[d['L'].apply(lambda x: l in x)]['fold'].value_counts())
-            print(f'Remaining desired number of total samples for each fold: {c}')
-
+        d = iterative_stratification(d=development_examples, k=k)
         print('FINISHED ITERATIVE STRATIFICATION')
-        fold_counts = pd.DataFrame(columns=['label', '0', '1', '2', '3', '4'])
         for l in labels_to_train + ['Background']:
             print(l)
             for f in range(k):
@@ -368,15 +370,66 @@ if __name__ == "__main__":
         # 	split 4: T T T V T
         # 	split 5: T T T T V
 
-        # - For each split...
-        # 	- Get the training folds of the split
-        # 	- Get the validation fold of the split
-        # 	- For each experiment sample size (2,5,10,25,50,100)...
-        # 		- Randomly sample the required number of examples per label from the training folds for the split
-        #           - For labels with fewer than the required number of training examples, apply upsampling to artificially increase the number of examples
-        # 		- Train the model on this sample (both without and with hyperparameter autotune)
-        # 		- Evaluate model performance with the validation fold for the split
-        # - For each experiment sample size...
-        # 	- Average the model's performance per class across all 5 splits for the sample size
+        # For each split...
+        for s in range(k):
+            print(f'Preparing datasets for split {s}...')
 
-        print('TODO!')
+            # Get the validation fold for this split
+            fold_idx_validation = s
+            # print(f'validation fold {fold_validation}')
+            # Get the training folds for this split
+            folds_idx_training  = [f for f in range(k) if f != fold_idx_validation]
+            # print(f'training folds {folds_training}')
+
+            available_training_data = d[d['fold'].isin(folds_idx_training)]
+
+            shared_validation_data = d[d['fold'] == fold_idx_validation]
+            shared_validation_data = shared_validation_data.copy()
+            validation_class_counts = class_imbalance_test(shared_validation_data, print_out=False)
+
+            # For each experiment sample size (2,5,10,25,50,100)...
+            experiment_train_samples = pd.DataFrame()
+            for experiment_sample_size in sample_size_experiments:
+
+                model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}_U{upsample}_I{fold_idx_validation}'
+                path_model_out = f'{os.getcwd()}/{output_path}/{model_iteration_id_stub}'
+                file_model_out = f'{path_model_out}/{model_iteration_id_stub}.tflite'
+                os.makedirs(path_model_out, exist_ok=True)
+
+                # Randomly sample the required number of examples per label from the training folds for the split
+                for l in (labels_to_train + ['Background']):
+                    l_examples = available_training_data[available_training_data['L'].apply(lambda x: l in x)]
+                    # TODO: For labels with fewer than the required number of training examples, apply upsampling to artificially increase the number of examples
+
+                    training_sample = l_examples.sample(n=min(experiment_sample_size, len(l_examples)), random_state=training_seed)
+                    available_training_data = available_training_data.drop(training_sample.index) # Remove the samples from 'available_training_data'
+                    # print(f'available training data: {len(available_training_data)}')
+                    experiment_train_samples = pd.concat([experiment_train_samples, training_sample]).reset_index(drop=True)
+
+                # print(f'SPLIT {s} TRAIN ----------------------------------------')
+                experiment_class_counts = class_imbalance_test(experiment_train_samples, print_out=False)
+
+                # Store combined training and validation filepaths
+                combined_files_csv_path = os.path.abspath(f'{output_path}/{model_iteration_id_stub}/combined_files.csv')
+                experiment_train_samples['dataset'] = 'training'
+                # print(experiment_train_samples)
+                shared_validation_data['dataset'] = 'validation'
+                # print(shared_validation_data)
+                combined_examples = pd.concat([experiment_train_samples, shared_validation_data], axis=0)
+                combined_examples.to_csv(combined_files_csv_path, index=False)
+
+                # Train the model on these samples 
+                print(f'Model {os.path.basename(file_model_out)} prepared for training with {experiment_sample_size} examples ======================================================================================')
+                command = [
+                    'python3', 'train_custom.py',
+                    '--i', combined_files_csv_path, # Path to combined (training and validation) data references csv.
+                    '--l', class_labels_csv_path, # Path to class labels csv.
+                    '--o', file_model_out, # File path to trained classifier model output.
+                    '--no-autotune' if not autotune else '--autotune' # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
+                ]
+
+                print('Manually execute the following commands to begin training:')
+                print('cd src/submodules/BirdNET-Analyzer')
+                print(" ".join(command))
+                print()
+                print(f'Afterwards, execute test_compare_validation_performance.py with model {model_iteration_id_stub} to evaluate performance, then average across all iterations')

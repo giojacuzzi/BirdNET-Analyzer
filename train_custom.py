@@ -210,7 +210,7 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
                     if progress_callback:
                         progress_callback(num_files_processed, len(tasks), label_combo)
         n_train_files_loaded = n_train_files_loaded + len(train_files_to_load)
-        print(f'{n_train_files_loaded}/{len(train_files)} ({n_train_files_loaded/len(train_files) * 100}%) training files loaded')
+        print(f'{n_train_files_loaded}/{len(train_files)} ({round(n_train_files_loaded/len(train_files) * 100,2)}%) training files loaded')
 
         # Load validation files using thread pool
         val_files_to_load = validation_files[validation_files['labels'] == label_combo]['path']
