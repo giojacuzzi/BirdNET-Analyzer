@@ -6,7 +6,7 @@ if __name__ == "__main__":
     training_data_path = 'data/training'
     output_path = 'data/models/custom'
 
-    sample_size_experiments = [100] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
+    sample_size_experiments = [5] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
     autotune = 0 # TODO: run another loop with autotune
 
     data_augmentation = 0 # TODO: Support augmentation
@@ -250,7 +250,6 @@ if __name__ == "__main__":
             # print("Training finished with exit code:", process.returncode)
             
             # Evaluate model performance with the shared validation data
-            # TODO
 
     # ========================================================================================================================================================================================================
     # PREPARE TRAIN WITH STRATIFIED K-FOLD CROSS VALIDATION
@@ -310,7 +309,7 @@ if __name__ == "__main__":
                     clj = cl[cl['label'] == l]['clj'].iloc[0]
                     max_clj_idx = [i for i, v in enumerate(clj) if v == max(clj)]
                     
-                    # TODO: In case of ties, then among the tying subsets (folds), the one with the highest number of desired examples cj get selected.  Further ties are broken randomly 
+                    # In case of ties, then among the tying subsets (folds), the one with the highest number of desired examples cj get selected.  Further ties are broken randomly 
                     if len(max_clj_idx) > 1:
                         # print(f"Tie detected for label '{l}' at indices {max_clj_idx}.")
                         # Among the tying subsets (folds), the one with the highest number of desired examples cj get selected
@@ -340,7 +339,7 @@ if __name__ == "__main__":
                     # Once the appropriate subset, m, is selected, we add the example (x, Y ) to Sm and remove it from D.
                     d.loc[index, 'fold'] = m
 
-                    # TODO: In the end of the iteration, we decrement the number of desired examples for each label of this example at subset m, cim, as well as the total number of desired examples for subset m, cm
+                    # In the end of the iteration, we decrement the number of desired examples for each label of this example at subset m, cim, as well as the total number of desired examples for subset m, cm
                     cl[cl['label'] == l]['clj'].iloc[0][m] -= 1
                     c[m] -= 1
 
@@ -399,8 +398,6 @@ if __name__ == "__main__":
                 # Randomly sample the required number of examples per label from the training folds for the split
                 for l in (labels_to_train + ['Background']):
                     l_examples = available_training_data[available_training_data['L'].apply(lambda x: l in x)]
-                    # TODO: For labels with fewer than the required number of training examples, apply upsampling to artificially increase the number of examples
-
                     training_sample = l_examples.sample(n=min(experiment_sample_size, len(l_examples)), random_state=training_seed)
                     available_training_data = available_training_data.drop(training_sample.index) # Remove the samples from 'available_training_data'
                     # print(f'available training data: {len(available_training_data)}')
@@ -408,6 +405,21 @@ if __name__ == "__main__":
 
                 # print(f'SPLIT {s} TRAIN ----------------------------------------')
                 experiment_class_counts = class_imbalance_test(experiment_train_samples, print_out=False)
+                # TODO: For labels with fewer than the required number of examples, upsample to artificially increase the number of examples via repeat.
+                if upsample:
+                    labels_to_upsample = experiment_class_counts[experiment_class_counts < experiment_sample_size].index.tolist()
+                    print(f'Upsampling {len(labels_to_upsample)} labels:')
+                    # input()
+                    for label_to_upsample in labels_to_upsample:
+                        print(label_to_upsample)
+                        # input()
+                        label_examples = experiment_train_samples[experiment_train_samples['L'].apply(lambda x: label_to_upsample in x)]
+                        n = experiment_sample_size - len(label_examples)
+                        print(f'Augmenting {label_to_upsample} (N={len(label_examples)}) with {n} random repeats...')
+                        upsampled_samples = label_examples.sample(n=n, replace=True, random_state=training_seed)
+                        print(upsampled_samples)
+                        # input()
+                        experiment_train_samples = pd.concat([experiment_train_samples, upsampled_samples], ignore_index=True) # add to development_examples
 
                 # Store combined training and validation filepaths
                 combined_files_csv_path = os.path.abspath(f'{output_path}/{model_iteration_id_stub}/combined_files.csv')
