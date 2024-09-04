@@ -7,11 +7,17 @@ if __name__ == "__main__":
     output_path = 'data/models/custom'
 
     sample_size_experiments = [5] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
-    autotune = 0 # TODO: run another loop with autotune
-
+    autotune = 0 # TODO: Support autotune
     data_augmentation = 0 # TODO: Support augmentation
 
+    k = 5
+
+    # Hyperparameters
     upsample = 0
+    learning_rate = 0.0001 # default 0.001
+    batch_size    = 32    # default 32
+    hidden_units  = 0     # default 0
+    label_smooth  = False # default False
 
     test_set_size = 25 # for novel labels (25)
     development_set_size = 125 # training + validation total (125)
@@ -174,7 +180,7 @@ if __name__ == "__main__":
         for experiment_sample_size in sample_size_experiments:
             print(f'Running model development with {experiment_sample_size} training samples...')
 
-            model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}'
+            model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}_LR{learning_rate}_BS{batch_size}_HU{hidden_units}_LS{label_smooth}'
             path_model_out = f'{os.getcwd()}/{output_path}/{model_iteration_id_stub}'
             file_model_out = f'{path_model_out}/{model_iteration_id_stub}.tflite'
             os.makedirs(path_model_out, exist_ok=True)
@@ -229,7 +235,11 @@ if __name__ == "__main__":
                 '--i', combined_files_csv_path, # Path to combined (training and validation) data references csv.
                 '--l', class_labels_csv_path, # Path to class labels csv.
                 '--o', file_model_out, # File path to trained classifier model output.
-                '--no-autotune' if not autotune else '--autotune' # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
+                '--no-autotune', #'--no-autotune' if not autotune else '--autotune', # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
+                '--learning_rate', learning_rate,
+                '--batch_size', batch_size,
+                '--hidden_units', hidden_units
+                # TODO: label smoothing
             ]
 
             print('Manually execute the following commands to begin training:')
@@ -348,8 +358,7 @@ if __name__ == "__main__":
 
             return(d)
 
-        print('BEGINNING ITERATIVE STRATIFICATION')
-        k = 5
+        print(f'BEGINNING ITERATIVE STRATIFICATION (k={k})')
         d = iterative_stratification(d=development_examples, k=k)
         print('FINISHED ITERATIVE STRATIFICATION')
         for l in labels_to_train + ['Background']:
@@ -390,7 +399,7 @@ if __name__ == "__main__":
             experiment_train_samples = pd.DataFrame()
             for experiment_sample_size in sample_size_experiments:
 
-                model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_A{autotune}_U{upsample}_I{fold_idx_validation}'
+                model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_LR{learning_rate}_BS{batch_size}_HU{hidden_units}_LS{label_smooth}_US{upsample}_I{fold_idx_validation}'
                 path_model_out = f'{os.getcwd()}/{output_path}/{model_iteration_id_stub}'
                 file_model_out = f'{path_model_out}/{model_iteration_id_stub}.tflite'
                 os.makedirs(path_model_out, exist_ok=True)
@@ -437,7 +446,10 @@ if __name__ == "__main__":
                     '--i', combined_files_csv_path, # Path to combined (training and validation) data references csv.
                     '--l', class_labels_csv_path, # Path to class labels csv.
                     '--o', file_model_out, # File path to trained classifier model output.
-                    '--no-autotune' if not autotune else '--autotune' # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
+                    '--no-autotune' if not autotune else '--autotune', # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
+                    '--learning_rate', str(learning_rate),
+                    '--batch_size',    str(batch_size),
+                    '--hidden_units',  str(hidden_units)
                 ]
 
                 print('Manually execute the following commands to begin training:')
@@ -445,3 +457,4 @@ if __name__ == "__main__":
                 print(" ".join(command))
                 print()
                 print(f'Afterwards, execute test_compare_validation_performance.py with model {model_iteration_id_stub} to evaluate performance, then average across all iterations')
+                sys.exit()
