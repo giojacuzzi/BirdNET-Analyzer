@@ -6,7 +6,7 @@ if __name__ == "__main__":
     training_data_path = 'data/training'
     output_path = 'data/models/custom'
 
-    sample_size_experiments = [5] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
+    sample_size_experiments = [100] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
     autotune = 0 # TODO: Support autotune
     data_augmentation = 0 # TODO: Support augmentation
 
@@ -14,8 +14,8 @@ if __name__ == "__main__":
 
     # Hyperparameters
     upsample = 0
-    learning_rate = 0.005 # default 0.001
-    batch_size    = 5    # default N
+    learning_rate = 0.001 # default 0.001
+    batch_size    = 100    # default N
     hidden_units  = 0     # default 0
     label_smooth  = False # default False
 
