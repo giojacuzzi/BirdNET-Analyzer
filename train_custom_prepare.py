@@ -14,14 +14,14 @@ if __name__ == "__main__":
 
     # Hyperparameters
     upsample = 0
-    learning_rate = 0.0001 # default 0.001
-    batch_size    = 32    # default 32
+    learning_rate = 0.005 # default 0.001
+    batch_size    = 5    # default N
     hidden_units  = 0     # default 0
     label_smooth  = False # default False
 
     test_set_size = 25 # for novel labels (25)
     development_set_size = 125 # training + validation total (125)
-    # NOTE: Labels to train are specified in training_labels.csv
+    # NOTE: Labels to train are specified in class_labels.csv
 
     stratified_kfold_cross_validation = True
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     import copy
 
     # Load class labels
-    class_labels_csv_path = os.path.abspath(f'{training_data_path}/training_labels.csv')
+    class_labels_csv_path = os.path.abspath(f'data/class_labels.csv')
     class_labels = pd.read_csv(class_labels_csv_path)
     class_labels = class_labels[class_labels['train'] == 1]
     preexisting_labels_to_train = list(class_labels[class_labels['novel'] == 0]['label_birdnet'])
