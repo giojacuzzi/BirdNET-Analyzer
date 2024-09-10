@@ -15,7 +15,7 @@ if __name__ == "__main__":
     # Hyperparameters
     upsample = 0
     learning_rate = 0.001 # default 0.001
-    batch_size    = 100    # default N
+    batch_size    = 10    # default N
     hidden_units  = 0     # default 0
     label_smooth  = False # default False
 
@@ -456,5 +456,5 @@ if __name__ == "__main__":
                 print('cd src/submodules/BirdNET-Analyzer')
                 print(" ".join(command))
                 print()
-                print(f'Afterwards, execute test_compare_validation_performance.py with model {model_iteration_id_stub} to evaluate performance, then average across all iterations')
+                print(f"Afterwards, execute test_evaluate_performance.py with model {model_iteration_id_stub} and dataset 'validation' to evaluate performance, then average across all iterations with test_cross-validation_perf.py")
                 sys.exit()
