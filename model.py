@@ -234,16 +234,20 @@ def trainLinearClassifier(
         y_train = utils.label_smoothing(y_train)
 
     # Early stopping
-    callbacks = [
-        keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=5,
-            verbose=1,
-            start_from_epoch=5,
-            restore_best_weights=True,
-        ),
-        FunctionCallback(on_epoch_end=on_epoch_end),
-    ]
+    if x_val.shape[0] == 0:
+        # Do not stop early if no validation data
+        callbacks = None
+    else:
+        callbacks = [
+            keras.callbacks.EarlyStopping(
+                monitor="val_loss",
+                patience=5,
+                verbose=1,
+                start_from_epoch=5,
+                restore_best_weights=True,
+            ),
+            FunctionCallback(on_epoch_end=on_epoch_end),
+        ]
 
     # Cosine annealing lr schedule
     lr_schedule = keras.experimental.CosineDecay(learning_rate, epochs * x_train.shape[0] / batch_size)
@@ -258,13 +262,19 @@ def trainLinearClassifier(
         ]
     )
 
+    if x_val.shape[0] == 0:
+        print('WARNING: No validation data provided')
+        validation_data = None
+    else:
+        validation_data = (x_val, y_val)
+
     # Train model
     history = classifier.fit(
         x_train,
         y_train,
         epochs=epochs,
         batch_size=batch_size,
-        validation_data=(x_val, y_val),
+        validation_data=validation_data,
         callbacks=callbacks
     )
 

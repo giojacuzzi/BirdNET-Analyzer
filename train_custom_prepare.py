@@ -6,22 +6,35 @@ if __name__ == "__main__":
     training_data_path = 'data/training'
     output_path = 'data/models/custom'
 
-    sample_size_experiments = [100] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
-    autotune = 0 # TODO: Support autotune
-    data_augmentation = 0 # TODO: Support augmentation
-
+    # Core hyperparameters
     k = 5
-
-    # Hyperparameters
-    upsample = 0
+    sample_size_experiments = [100] # Sample size experiments for model development (e.g. 2, 5, 10, 25, 50, 75, 100)
+    epochs = 50           # default 50
     learning_rate = 0.001 # default 0.001
     batch_size    = 10    # default N
     hidden_units  = 0     # default 0
-    label_smooth  = False # default False
-
-    test_set_size = 25 # for novel labels (25)
+    training_set_proportion = 0.80
     development_set_size = 125 # training + validation total (125)
-    # NOTE: Labels to train are specified in class_labels.csv
+    test_set_size = 25 # for novel labels only (25) # NOTE: Labels to train are specified in class_labels.csv
+
+    # Other hyperparameters
+    label_smooth  = False # default False
+    autotune = 0 # TODO: Support autotune
+    data_augmentation = 0 # TODO: Support augmentation
+    upsample = 0
+
+    # # DEBUG #######
+    # # FINAL MODEL SPECS
+    # k = 1
+    # sample_size_experiments = [125] # consider acceptable imbalance ratio between minority class (Belted Kingfisher, N=22), e.g. 2:1 marginal, 10:1 modest (Gary M. Weiss, Foundations of Imbalanced Learning)
+    # learning_rate = 0.001 # default 0.001
+    # batch_size    = 10    # default N
+    # hidden_units  = 0     # default 0
+    # training_set_proportion = 1.0
+    # development_set_size = sample_size_experiments[0]
+    # ###############
+
+
 
     stratified_kfold_cross_validation = True
 
@@ -106,9 +119,14 @@ if __name__ == "__main__":
 
     # Find the majority and minority classes (i.e. value_couts across all labels present in available_examples)
     def class_imbalance_test(df_in, print_out=False):
+        if df_in.empty:
+            print('WARNING: Unable to calculate class imbalance with empty dataframe')
+            return
         if print_out:
             print('Finding majority and minority classes from label value counts...')
         df = copy.deepcopy(df_in)
+        print('class_imbalance_test')
+        print(df)
         df['labels'] = df['labels'].str.split(', ')
         df = df.explode('labels')
         label_counts = df['labels'].value_counts()
@@ -151,7 +169,6 @@ if __name__ == "__main__":
 
         # Split development data into 20% validation data (25 examples for labels with 125 total) and 80% training data (100 examples for labels with 125 total).
         # This validation data will be used across all model experiments
-        training_set_proportion = 0.80
         validation_set_proportion = round(1.0 - training_set_proportion, 2)
         print(f'Randomly choosing {training_set_proportion * 100}/{validation_set_proportion * 100}% for each label as training/validation data...')
         validation_examples = pd.DataFrame()
@@ -361,14 +378,25 @@ if __name__ == "__main__":
         print(f'BEGINNING ITERATIVE STRATIFICATION (k={k})')
         d = iterative_stratification(d=development_examples, k=k)
         print('FINISHED ITERATIVE STRATIFICATION')
+        print(d)
+        # input()
+        # THIS IS THE PROBLEM v
+        input()
+        print('assign folds...')
         for l in labels_to_train + ['Background']:
             print(l)
             for f in range(k):
                 dl = d[d['L'].apply(lambda x: l in x)]
+                # print(1)
+                # print(dl)
                 dl = dl[dl['fold'] == f]
-                print(f'Fold {f} - {len(dl)}')
+                # print(2)
+                # print(dl)
+                # print(f'Fold {f} - {len(dl)}')
         print(d)
         print(d['fold'].value_counts())
+        input()
+        # sys.exit()
 
         print('BEGINNING K-FOLD CROSS-VALIDATION DATASET PREPARATION')
         # Split each fold into validation data (25 examples for labels with 125 total) and training data (100 examples for labels with 125 total) with a 80/20 split, each fold being of up to size 25:
@@ -386,18 +414,32 @@ if __name__ == "__main__":
             fold_idx_validation = s
             # print(f'validation fold {fold_validation}')
             # Get the training folds for this split
-            folds_idx_training  = [f for f in range(k) if f != fold_idx_validation]
-            # print(f'training folds {folds_training}')
+            if training_set_proportion != 1.0:
+                folds_idx_training  = [f for f in range(k) if f != fold_idx_validation]
+                shared_validation_data = d[d['fold'] == fold_idx_validation]
+                shared_validation_data = shared_validation_data.copy()
+            else:
+                folds_idx_training = [f for f in range(k)]
+                shared_validation_data = pd.DataFrame()
+            print(f'training folds {folds_idx_training}')
 
             available_training_data = d[d['fold'].isin(folds_idx_training)]
+            print('d')
+            print(d)
+            print('available_training_data')
+            print(available_training_data)
+            input()
 
-            shared_validation_data = d[d['fold'] == fold_idx_validation]
-            shared_validation_data = shared_validation_data.copy()
-            validation_class_counts = class_imbalance_test(shared_validation_data, print_out=False)
+            validation_class_counts = class_imbalance_test(shared_validation_data, print_out=True)
+            input()
 
             # For each experiment sample size (2,5,10,25,50,100)...
             experiment_train_samples = pd.DataFrame()
             for experiment_sample_size in sample_size_experiments:
+                print(f'experiment_sample_size {experiment_sample_size}')
+                print(f'labels_to_train {labels_to_train}')
+                print('available_training_data')
+                print(available_training_data)
 
                 model_iteration_id_stub = f'custom_S{training_seed}_N{experiment_sample_size}_LR{learning_rate}_BS{batch_size}_HU{hidden_units}_LS{label_smooth}_US{upsample}_I{fold_idx_validation}'
                 path_model_out = f'{os.getcwd()}/{output_path}/{model_iteration_id_stub}'
@@ -413,7 +455,11 @@ if __name__ == "__main__":
                     experiment_train_samples = pd.concat([experiment_train_samples, training_sample]).reset_index(drop=True)
 
                 # print(f'SPLIT {s} TRAIN ----------------------------------------')
-                experiment_class_counts = class_imbalance_test(experiment_train_samples, print_out=False)
+                print(f'experiment_train_samples')
+                print(experiment_train_samples)
+                # input()
+                experiment_class_counts = class_imbalance_test(experiment_train_samples, print_out=True)
+                input()
                 # TODO: For labels with fewer than the required number of examples, upsample to artificially increase the number of examples via repeat.
                 if upsample:
                     labels_to_upsample = experiment_class_counts[experiment_class_counts < experiment_sample_size].index.tolist()
@@ -434,7 +480,8 @@ if __name__ == "__main__":
                 combined_files_csv_path = os.path.abspath(f'{output_path}/{model_iteration_id_stub}/combined_files.csv')
                 experiment_train_samples['dataset'] = 'training'
                 # print(experiment_train_samples)
-                shared_validation_data['dataset'] = 'validation'
+                if training_set_proportion != 1.0:
+                    shared_validation_data['dataset'] = 'validation'
                 # print(shared_validation_data)
                 combined_examples = pd.concat([experiment_train_samples, shared_validation_data], axis=0)
                 combined_examples.to_csv(combined_files_csv_path, index=False)
@@ -446,7 +493,8 @@ if __name__ == "__main__":
                     '--i', combined_files_csv_path, # Path to combined (training and validation) data references csv.
                     '--l', class_labels_csv_path, # Path to class labels csv.
                     '--o', file_model_out, # File path to trained classifier model output.
-                    '--no-autotune' if not autotune else '--autotune', # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).
+                    '--no-autotune' if not autotune else '--autotune', # Whether to use automatic hyperparameter tuning (this will execute multiple training runs to search for optimal hyperparameters).\
+                    '--epochs', str(epochs),
                     '--learning_rate', str(learning_rate),
                     '--batch_size',    str(batch_size),
                     '--hidden_units',  str(hidden_units)
@@ -454,7 +502,7 @@ if __name__ == "__main__":
 
                 print('Manually execute the following commands to begin training:')
                 print('cd src/submodules/BirdNET-Analyzer')
-                print(" ".join(command))
+                print(' '.join(command))
                 print()
-                print(f"Afterwards, execute test_evaluate_performance.py with model {model_iteration_id_stub} and dataset 'validation' to evaluate performance, then average across all iterations with test_cross-validation_perf.py")
-                sys.exit()
+                if k > 1:
+                    print(f"Afterwards, execute test_evaluate_performance.py with model {model_iteration_id_stub} and dataset 'validation' to evaluate performance, then average across all iterations with test_cross-validation_perf.py")
