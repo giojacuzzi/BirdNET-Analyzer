@@ -24,14 +24,15 @@ if __name__ == "__main__":
     upsample = 0
 
     # # DEBUG #######
-    # # FINAL MODEL SPECS
-    # k = 1
-    # sample_size_experiments = [125] # consider acceptable imbalance ratio between minority class (Belted Kingfisher, N=22), e.g. 2:1 marginal, 10:1 modest (Gary M. Weiss, Foundations of Imbalanced Learning)
-    # learning_rate = 0.001 # default 0.001
-    # batch_size    = 10    # default N
-    # hidden_units  = 0     # default 0
-    # training_set_proportion = 1.0
-    # development_set_size = sample_size_experiments[0]
+    # FINAL MODEL SPECS
+    k = 1
+    sample_size_experiments = [125] # consider acceptable imbalance ratio between minority class (Belted Kingfisher, N=22), e.g. 2:1 marginal, 10:1 modest (Gary M. Weiss, Foundations of Imbalanced Learning)
+    epochs        = 15 # average of epochs across xval model's best validation losses
+    learning_rate = 0.001
+    batch_size    = 10
+    hidden_units  = 0
+    training_set_proportion = 1.0
+    development_set_size = sample_size_experiments[0]
     # ###############
 
 

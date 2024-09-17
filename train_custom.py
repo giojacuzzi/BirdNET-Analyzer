@@ -214,24 +214,29 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
 
         # Load validation files using thread pool
         val_files_to_load = validation_files[validation_files['labels'] == label_combo]['path']
-        print(f'Loading {len(val_files_to_load)} validation files using thread pool...')     
-        with Pool(cfg.CPU_THREADS) as p:
-            tasks = []
-            for f in val_files_to_load:
-                task = p.apply_async(partial(_loadAudioFile, f=f, label_vector=label_vector, config=cfg.getConfig()))
-                tasks.append(task)
-            num_files_processed = 0 # Wait for tasks to complete and monitor progress with tqdm
-            with tqdm.tqdm(total=len(tasks), desc=f" - loading '{label_combo}'", unit='f') as progress_bar:
-                for task in tasks:
-                    result = task.get()
-                    x_val += result[0]
-                    y_val += result[1]
-                    num_files_processed += 1
-                    progress_bar.update(1)
-                    if progress_callback:
-                        progress_callback(num_files_processed, len(tasks), label_combo)
-        n_val_files_loaded = n_val_files_loaded + len(val_files_to_load)
-        print(f'{n_val_files_loaded}/{len(validation_files)} ({round(n_val_files_loaded/len(validation_files) * 100,2)}%) validation files loaded')
+        if len(validation_files) > 0:
+            print(f'Loading {len(val_files_to_load)} validation files using thread pool...')
+            with Pool(cfg.CPU_THREADS) as p:
+                tasks = []
+                for f in val_files_to_load:
+                    task = p.apply_async(partial(_loadAudioFile, f=f, label_vector=label_vector, config=cfg.getConfig()))
+                    tasks.append(task)
+                num_files_processed = 0 # Wait for tasks to complete and monitor progress with tqdm
+                with tqdm.tqdm(total=len(tasks), desc=f" - loading '{label_combo}'", unit='f') as progress_bar:
+                    for task in tasks:
+                        result = task.get()
+                        x_val += result[0]
+                        y_val += result[1]
+                        num_files_processed += 1
+                        progress_bar.update(1)
+                        if progress_callback:
+                            progress_callback(num_files_processed, len(tasks), label_combo)
+            n_val_files_loaded = n_val_files_loaded + len(val_files_to_load)
+            pcnt_complete = n_val_files_loaded/len(validation_files) * 100
+        else:
+            print('No validation files to load')
+            pcnt_complete = 100
+        print(f'{n_val_files_loaded}/{len(validation_files)} ({round(pcnt_complete,2)}%) validation files loaded')
     
     # Convert to numpy arrays
     x_train = np.array(x_train, dtype="float32")
@@ -391,10 +396,6 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         on_epoch_end=on_epoch_end,
     )
 
-    # Best validation AUPRC (at minimum validation loss)
-    best_val_auprc = history.history["val_AUPRC"][np.argmin(history.history["val_loss"])]
-    best_val_auroc = history.history["val_AUROC"][np.argmin(history.history["val_loss"])]
-
     if cfg.TRAINED_MODEL_OUTPUT_FORMAT == "both":
         model.save_raven_model(classifier, cfg.CUSTOM_CLASSIFIER, labels)
         model.saveLinearClassifier(classifier, cfg.CUSTOM_CLASSIFIER, labels, mode=cfg.TRAINED_MODEL_SAVE_MODE)
@@ -404,8 +405,13 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         model.save_raven_model(classifier, cfg.CUSTOM_CLASSIFIER, labels)
     else:
         raise ValueError(f"Unknown model output format: {cfg.TRAINED_MODEL_OUTPUT_FORMAT}")
+    print('Saved model outputs.')
 
-    print(f"...Done. Best AUPRC: {best_val_auprc}, Best AUROC: {best_val_auroc}", flush=True)
+    # Best validation AUPRC (at minimum validation loss)
+    if x_val.shape[0] > 0:
+        best_val_auprc = history.history["val_AUPRC"][np.argmin(history.history["val_loss"])]
+        best_val_auroc = history.history["val_AUROC"][np.argmin(history.history["val_loss"])]
+        print(f"...Done. Best AUPRC: {best_val_auprc}, Best AUROC: {best_val_auroc}", flush=True)
 
     return history
 
@@ -480,13 +486,19 @@ if __name__ == "__main__":
 
     # Train model
     history = trainModel()
-    auprc = history.history["val_AUPRC"]
-    auroc = history.history["val_AUROC"]
-    import matplotlib.pyplot as plt
 
-    fig = plt.figure()
-    plt.plot(auprc, label="AUPRC")
-    plt.plot(auroc, label="AUROC")
-    plt.legend()
-    plt.xlabel("Epoch")
-    plt.show()
+    try:
+        auprc = history.history["val_AUPRC"]
+        auroc = history.history["val_AUROC"]
+        import matplotlib.pyplot as plt
+
+        fig = plt.figure()
+        plt.plot(auprc, label="AUPRC")
+        plt.plot(auroc, label="AUROC")
+        plt.legend()
+        plt.xlabel("Epoch")
+        plt.show()
+    except Exception as e:
+        print(f"Unable to report validation results")
+    finally:
+        print("Finished training!")
