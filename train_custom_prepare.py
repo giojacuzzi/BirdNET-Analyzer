@@ -46,6 +46,7 @@ if __name__ == "__main__":
     import sys
     import subprocess
     import copy
+    import shutil
 
     # Load class labels
     class_labels_csv_path = os.path.abspath(f'data/class_labels.csv')
@@ -114,9 +115,16 @@ if __name__ == "__main__":
         available_examples = available_examples.drop(sampled_rows.index) # Remove the samples from the training data
     # print(test_examples_novel['label'].value_counts())
 
-    # # Store test example filepaths
-    # test_files_csv_path = os.path.abspath(f'{output_path}/test_files.csv')
-    # test_examples_novel.to_csv(test_files_csv_path, index=False)
+    # Store test example filepaths
+    test_files_csv_path = os.path.abspath(f'{output_path}/test_files.csv')
+    test_examples_novel.to_csv(test_files_csv_path, index=False)
+    print(f'Saved test example filepaths to {test_files_csv_path}')
+    for index, row in test_examples_novel.iterrows():
+        path = row['path']
+        label = row['labels'].split(',')[0]
+        label = label.split('_')[1].lower()
+        shutil.copy(path, f'/Users/giojacuzzi/Downloads/{label}-0.0_{os.path.basename(path)}')
+    sys.exit()
 
     # Find the majority and minority classes (i.e. value_couts across all labels present in available_examples)
     def class_imbalance_test(df_in, print_out=False):
