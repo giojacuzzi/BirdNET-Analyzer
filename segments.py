@@ -16,6 +16,8 @@ import utils
 # Set numpy random seed
 np.random.seed(cfg.RANDOM_SEED)
 
+print('segments.py')
+
 
 def detectRType(line: str):
     """Detects the type of result file.
@@ -88,6 +90,8 @@ def parseFiles(flist: list[dict], max_segments=100):
     species_segments: dict[str, list] = {}
 
     for f in flist:
+        print(f'parseFiles f {f}')
+
         # Paths
         afile = f["audio"]
         rfile = f["result"]
@@ -140,25 +144,50 @@ def findSegments(afile: str, rfile: str):
     """
     segments: list[dict] = []
 
+    print(f'findSegments {afile} {rfile}')
+
     # Open and parse result file
     lines = utils.readLines(rfile)
 
     # Auto-detect result type
     rtype = detectRType(lines[0])
+    print(f'rtype {rtype}')
+    print(f'first line: {lines[0]}')
 
     # Get start and end times based on rtype
     confidence = 0
     start = end = 0.0
     species = ""
 
+    # Get indices from header columns
+    if rtype == "table":
+        cols = lines[0].split("\t")
+        idx_start = cols.index("Begin Time (s)")
+        idx_end = cols.index("End Time (s)")
+        idx_species = cols.index("Common Name")
+        idx_confidence = cols.index("Confidence")
+        for idx, col in enumerate(cols):
+            print(f"Part: '{col}', Index in 'parts': {idx}")
+    
+    if rtype == "csv":
+        cols = lines[0].split(",")
+        idx_start = cols.index("Start (s)")
+        idx_end = cols.index("End (s)")
+        idx_species = cols.index("Common name")
+        idx_confidence = cols.index("Confidence")
+
     for i, line in enumerate(lines):
         if rtype == "table" and i > 0:
             # TODO: Use header columns to get the right indices
             d = line.split("\t")
-            start = float(d[5])
-            end = float(d[6])
-            species = d[-2]
-            confidence = float(d[-1])
+            start = float(d[idx_start])
+            print(f'start {start}')
+            end = float(d[idx_end])
+            print(f'end {end}')
+            species = d[idx_species]
+            print(f'species {species}')
+            confidence = float(d[idx_confidence])
+            print(f'confidence {confidence}')
 
         elif rtype == "audacity":
             d = line.split("\t")
@@ -183,10 +212,10 @@ def findSegments(afile: str, rfile: str):
 
         elif rtype == "csv" and i > 0:
             d = line.split(",")
-            start = float(d[0])
-            end = float(d[1])
-            species = d[3]
-            confidence = float(d[4])
+            start = float(d[idx_start])
+            end = float(d[idx_end])
+            species = d[idx_species]
+            confidence = float(d[idx_confidence])
 
         # Check if confidence is high enough and label is not "nocall"
         if confidence >= cfg.MIN_CONFIDENCE and species.lower() != "nocall":
@@ -255,24 +284,7 @@ def extractSegments(item: tuple[tuple[str, list[dict]], float, dict[str]]):
 
     return True
 
-
-if __name__ == "__main__":
-    # Parse arguments
-    parser = argparse.ArgumentParser(description="Extract segments from audio files based on BirdNET detections.")
-    parser.add_argument("--audio", default="example/", help="Path to folder containing audio files.")
-    parser.add_argument("--results", default="example/", help="Path to folder containing result files.")
-    parser.add_argument("--o", default="example/", help="Output folder path for extracted segments.")
-    parser.add_argument(
-        "--min_conf", type=float, default=0.1, help="Minimum confidence threshold. Values in [0.01, 0.99]. Defaults to 0.1."
-    )
-    parser.add_argument("--max_segments", type=int, default=100, help="Number of randomly extracted segments per species.")
-    parser.add_argument(
-        "--seg_length", type=float, default=3.0, help="Length of extracted segments in seconds. Defaults to 3.0."
-    )
-    parser.add_argument("--threads", type=int, default=min(8, max(1, multiprocessing.cpu_count() // 2)), help="Number of CPU threads.")
-
-    args = parser.parse_args()
-
+def segments_main_wrapper(args):
     # Parse audio and result folders
     cfg.FILE_LIST = parseFolders(args.audio, args.results)
 
@@ -301,6 +313,27 @@ if __name__ == "__main__":
     else:
         with Pool(cfg.CPU_THREADS) as p:
             p.map(extractSegments, flist)
+
+if __name__ == "__main__":
+    print('segments.py MAIN')
+
+    # Parse arguments
+    parser = argparse.ArgumentParser(description="Extract segments from audio files based on BirdNET detections.")
+    parser.add_argument("--audio", default="example/", help="Path to folder containing audio files.")
+    parser.add_argument("--results", default="example/", help="Path to folder containing result files.")
+    parser.add_argument("--o", default="example/", help="Output folder path for extracted segments.")
+    parser.add_argument(
+        "--min_conf", type=float, default=0.1, help="Minimum confidence threshold. Values in [0.01, 0.99]. Defaults to 0.1."
+    )
+    parser.add_argument("--max_segments", type=int, default=100, help="Number of randomly extracted segments per species.")
+    parser.add_argument(
+        "--seg_length", type=float, default=3.0, help="Length of extracted segments in seconds. Defaults to 3.0."
+    )
+    parser.add_argument("--threads", type=int, default=min(8, max(1, multiprocessing.cpu_count() // 2)), help="Number of CPU threads.")
+
+    args = parser.parse_args()
+
+    segments_main_wrapper(args)
 
     # A few examples to test
     # python3 segments.py --audio example/ --results example/ --o example/segments/
