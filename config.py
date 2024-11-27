@@ -2,6 +2,8 @@
 # Misc settings #
 #################
 
+print('config.py')
+
 # GUI version
 GUI_VERSION: str = "1.1.0"
 

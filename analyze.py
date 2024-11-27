@@ -18,9 +18,17 @@ import model
 import species
 import utils
 
+print('analyze.py')
+
 #                    0       1      2           3             4              5               6                7           8             9           10         11
 RTABLE_HEADER = "Selection\tView\tChannel\tBegin Time (s)\tEnd Time (s)\tLow Freq (Hz)\tHigh Freq (Hz)\tCommon Name\tSpecies Code\tConfidence\tBegin Path\tFile Offset (s)\n"
 
+def mango():
+    print('mango!')
+def apple():
+    print('apple!')
+def pear():
+    print('pear!')
 
 def loadCodes():
     """Loads the eBird codes.
@@ -348,6 +356,7 @@ def analyzeFile(item):
     # Get file path and restore cfg
     fpath: str = item[0]
     cfg.setConfig(item[1])
+    print(f"Analyzing {fpath}", flush=True)
 
     # Start time
     start_time = datetime.datetime.now()
@@ -433,10 +442,161 @@ def analyzeFile(item):
 
     return True
 
+def analyze_main_wrapper(args, script_dir):
+    # Set paths relative to script path (requested in #3)
+    # script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    print(f"script_dir {script_dir}")
+    cfg.MODEL_PATH = os.path.join(script_dir, cfg.MODEL_PATH)
+    print(f"cfg.MODEL_PATH {cfg.MODEL_PATH}")
+    cfg.LABELS_FILE = os.path.join(script_dir, cfg.LABELS_FILE)
+    print(f"cfg.LABELS_FILE {cfg.LABELS_FILE}")
+    cfg.TRANSLATED_LABELS_PATH = os.path.join(script_dir, cfg.TRANSLATED_LABELS_PATH)
+    cfg.MDATA_MODEL_PATH = os.path.join(script_dir, cfg.MDATA_MODEL_PATH)
+    cfg.CODES_FILE = os.path.join(script_dir, cfg.CODES_FILE)
+    cfg.ERROR_LOG_FILE = os.path.join(script_dir, cfg.ERROR_LOG_FILE)
+
+    # Load eBird codes, labels
+    cfg.CODES = loadCodes()
+    cfg.LABELS = utils.readLines(cfg.LABELS_FILE)
+
+    cfg.SKIP_EXISTING_RESULTS = args.skip_existing_results
+
+    # Set custom classifier?
+    print(f"mango {args.classifier} {type(args.classifier)}")
+    if args.classifier is not None:
+        cfg.CUSTOM_CLASSIFIER = args.classifier  # we treat this as absolute path, so no need to join with dirname
+        print(f'cfg.CUSTOM_CLASSIFIER {cfg.CUSTOM_CLASSIFIER}')
+
+        if args.classifier.endswith(".tflite"):
+            cfg.LABELS_FILE = args.classifier.replace(".tflite", "_Labels.txt")  # same for labels file
+            print(f'custom cfg.LABELS_FILE {cfg.LABELS_FILE}')
+            cfg.LABELS = utils.readLines(cfg.LABELS_FILE)
+        else:
+            cfg.APPLY_SIGMOID = False
+            cfg.LABELS_FILE = os.path.join(args.classifier, "labels", "label_names.csv")
+            cfg.LABELS = [line.split(",")[1] for line in utils.readLines(cfg.LABELS_FILE)]
+
+        args.lat = -1
+        args.lon = -1
+        args.locale = "en"
+
+    # Load translated labels
+    lfile = os.path.join(
+        cfg.TRANSLATED_LABELS_PATH, os.path.basename(cfg.LABELS_FILE).replace(".txt", "_{}.txt".format(args.locale))
+    )
+
+    if not args.locale in ["en"] and os.path.isfile(lfile):
+        cfg.TRANSLATED_LABELS = utils.readLines(lfile)
+    else:
+        cfg.TRANSLATED_LABELS = cfg.LABELS
+
+    ### Make sure to comment out appropriately if you are not using args. ###
+
+    # Load species list from location filter or provided list
+    cfg.LATITUDE, cfg.LONGITUDE, cfg.WEEK = args.lat, args.lon, args.week
+    cfg.LOCATION_FILTER_THRESHOLD = max(0.01, min(0.99, float(args.sf_thresh)))
+
+    if cfg.LATITUDE == -1 and cfg.LONGITUDE == -1:
+        if not args.slist:
+            cfg.SPECIES_LIST_FILE = None
+        else:
+            cfg.SPECIES_LIST_FILE = args.slist #os.path.join(script_dir, args.slist)
+
+            if os.path.isdir(cfg.SPECIES_LIST_FILE):
+                cfg.SPECIES_LIST_FILE = os.path.join(cfg.SPECIES_LIST_FILE, "species_list.txt")
+
+        cfg.SPECIES_LIST = utils.readLines(cfg.SPECIES_LIST_FILE)
+    else:
+        cfg.SPECIES_LIST_FILE = None
+        cfg.SPECIES_LIST = species.getSpeciesList(cfg.LATITUDE, cfg.LONGITUDE, cfg.WEEK, cfg.LOCATION_FILTER_THRESHOLD)
+
+    if not cfg.SPECIES_LIST:
+        print(f"Label list contains {len(cfg.LABELS)} labels")
+    else:
+        print(f"Label list contains {len(cfg.SPECIES_LIST)} labels")
+
+    # Set input and output path
+    cfg.INPUT_PATH = args.i
+    cfg.OUTPUT_PATH = args.o
+
+    # Parse input files
+    if os.path.isdir(cfg.INPUT_PATH):
+        cfg.FILE_LIST = utils.collect_audio_files(cfg.INPUT_PATH)
+        print(f"Found {len(cfg.FILE_LIST)} files to analyze")
+    else:
+        cfg.FILE_LIST = [cfg.INPUT_PATH]
+    print(f'cfg.FILE_LIST {cfg.FILE_LIST}')
+
+    # Set confidence threshold
+    cfg.MIN_CONFIDENCE = max(0.01, min(0.99, float(args.min_conf)))
+
+    # Set sensitivity
+    cfg.SIGMOID_SENSITIVITY = max(0.5, min(1.0 - (float(args.sensitivity) - 1.0), 1.5))
+
+    # Set overlap
+    cfg.SIG_OVERLAP = max(0.0, min(2.9, float(args.overlap)))
+
+    # Set bandpass frequency range
+    cfg.BANDPASS_FMIN = max(0, min(cfg.SIG_FMAX, int(args.fmin)))
+    cfg.BANDPASS_FMAX = max(cfg.SIG_FMIN, min(cfg.SIG_FMAX, int(args.fmax)))
+
+    # Set result type
+    cfg.RESULT_TYPE = args.rtype.lower()
+
+    if not cfg.RESULT_TYPE in ["table", "audacity", "r", "kaleidoscope", "csv"]:
+        cfg.RESULT_TYPE = "table"
+
+    # Set output file
+    if args.output_file is not None and cfg.RESULT_TYPE == "table":
+        cfg.OUTPUT_FILE = args.output_file
+    else:
+        cfg.OUTPUT_FILE = None
+    print(f'cfg.OUTPUT_FILE {cfg.OUTPUT_FILE}')
+
+    # Set number of threads
+    if os.path.isdir(cfg.INPUT_PATH):
+        cfg.CPU_THREADS = max(1, int(args.threads))
+        cfg.TFLITE_THREADS = 1
+    else:
+        cfg.CPU_THREADS = 1
+        cfg.TFLITE_THREADS = max(1, int(args.threads))
+
+    # Set batch size
+    cfg.BATCH_SIZE = max(1, int(args.batchsize))
+
+    # Add config items to each file list entry.
+    # We have to do this for Windows which does not
+    # support fork() and thus each process has to
+    # have its own config. USE LINUX!
+    flist = [(f, cfg.getConfig()) for f in cfg.FILE_LIST]
+    print(f'flist length {len(flist)}')
+
+    # Analyze files
+    if cfg.CPU_THREADS < 2 or len(flist) < 2:
+        print(f'analyzing without multithread')
+        for entry in flist:
+            analyzeFile(entry)
+    else:
+        print(f'starting Pool({cfg.CPU_THREADS})')
+        with Pool(cfg.CPU_THREADS) as p:
+            # Map analyzeFile function to each entry in flist
+            results = p.map_async(analyzeFile, flist)
+            # Wait for all tasks to complete
+            results.wait()
+    
+    print('finished analyze!')
+
+    # Combine results?
+    if not cfg.OUTPUT_FILE is None:
+        print(f"Combining results into {cfg.OUTPUT_FILE}...", end="", flush=True)
+        combineResults(cfg.OUTPUT_PATH, cfg.OUTPUT_FILE)
+        print("done!", flush=True)
 
 if __name__ == "__main__":
+    print('analyze.py MAIN')
+
     # Freeze support for executable
-    freeze_support()
+    # freeze_support()
 
     # Parse arguments
     parser = argparse.ArgumentParser(description="Analyze audio files with BirdNET")
@@ -529,141 +689,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Set paths relative to script path (requested in #3)
-    script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    cfg.MODEL_PATH = os.path.join(script_dir, cfg.MODEL_PATH)
-    cfg.LABELS_FILE = os.path.join(script_dir, cfg.LABELS_FILE)
-    cfg.TRANSLATED_LABELS_PATH = os.path.join(script_dir, cfg.TRANSLATED_LABELS_PATH)
-    cfg.MDATA_MODEL_PATH = os.path.join(script_dir, cfg.MDATA_MODEL_PATH)
-    cfg.CODES_FILE = os.path.join(script_dir, cfg.CODES_FILE)
-    cfg.ERROR_LOG_FILE = os.path.join(script_dir, cfg.ERROR_LOG_FILE)
-
-    # Load eBird codes, labels
-    cfg.CODES = loadCodes()
-    cfg.LABELS = utils.readLines(cfg.LABELS_FILE)
-
-    cfg.SKIP_EXISTING_RESULTS = args.skip_existing_results
-
-    # Set custom classifier?
-    if args.classifier is not None:
-        cfg.CUSTOM_CLASSIFIER = args.classifier  # we treat this as absolute path, so no need to join with dirname
-
-        if args.classifier.endswith(".tflite"):
-            cfg.LABELS_FILE = args.classifier.replace(".tflite", "_Labels.txt")  # same for labels file
-            cfg.LABELS = utils.readLines(cfg.LABELS_FILE)
-        else:
-            cfg.APPLY_SIGMOID = False
-            cfg.LABELS_FILE = os.path.join(args.classifier, "labels", "label_names.csv")
-            cfg.LABELS = [line.split(",")[1] for line in utils.readLines(cfg.LABELS_FILE)]
-
-        args.lat = -1
-        args.lon = -1
-        args.locale = "en"
-
-    # Load translated labels
-    lfile = os.path.join(
-        cfg.TRANSLATED_LABELS_PATH, os.path.basename(cfg.LABELS_FILE).replace(".txt", "_{}.txt".format(args.locale))
-    )
-
-    if not args.locale in ["en"] and os.path.isfile(lfile):
-        cfg.TRANSLATED_LABELS = utils.readLines(lfile)
-    else:
-        cfg.TRANSLATED_LABELS = cfg.LABELS
-
-    ### Make sure to comment out appropriately if you are not using args. ###
-
-    # Load species list from location filter or provided list
-    cfg.LATITUDE, cfg.LONGITUDE, cfg.WEEK = args.lat, args.lon, args.week
-    cfg.LOCATION_FILTER_THRESHOLD = max(0.01, min(0.99, float(args.sf_thresh)))
-
-    if cfg.LATITUDE == -1 and cfg.LONGITUDE == -1:
-        if not args.slist:
-            cfg.SPECIES_LIST_FILE = None
-        else:
-            cfg.SPECIES_LIST_FILE = os.path.join(script_dir, args.slist)
-
-            if os.path.isdir(cfg.SPECIES_LIST_FILE):
-                cfg.SPECIES_LIST_FILE = os.path.join(cfg.SPECIES_LIST_FILE, "species_list.txt")
-
-        cfg.SPECIES_LIST = utils.readLines(cfg.SPECIES_LIST_FILE)
-    else:
-        cfg.SPECIES_LIST_FILE = None
-        cfg.SPECIES_LIST = species.getSpeciesList(cfg.LATITUDE, cfg.LONGITUDE, cfg.WEEK, cfg.LOCATION_FILTER_THRESHOLD)
-
-    if not cfg.SPECIES_LIST:
-        print(f"Species list contains {len(cfg.LABELS)} species")
-    else:
-        print(f"Species list contains {len(cfg.SPECIES_LIST)} species")
-
-    # Set input and output path
-    cfg.INPUT_PATH = args.i
-    cfg.OUTPUT_PATH = args.o
-
-    # Parse input files
-    if os.path.isdir(cfg.INPUT_PATH):
-        cfg.FILE_LIST = utils.collect_audio_files(cfg.INPUT_PATH)
-        print(f"Found {len(cfg.FILE_LIST)} files to analyze")
-    else:
-        cfg.FILE_LIST = [cfg.INPUT_PATH]
-
-    # Set confidence threshold
-    cfg.MIN_CONFIDENCE = max(0.01, min(0.99, float(args.min_conf)))
-
-    # Set sensitivity
-    cfg.SIGMOID_SENSITIVITY = max(0.5, min(1.0 - (float(args.sensitivity) - 1.0), 1.5))
-
-    # Set overlap
-    cfg.SIG_OVERLAP = max(0.0, min(2.9, float(args.overlap)))
-
-    # Set bandpass frequency range
-    cfg.BANDPASS_FMIN = max(0, min(cfg.SIG_FMAX, int(args.fmin)))
-    cfg.BANDPASS_FMAX = max(cfg.SIG_FMIN, min(cfg.SIG_FMAX, int(args.fmax)))
-
-    # Set result type
-    cfg.RESULT_TYPE = args.rtype.lower()
-
-    if not cfg.RESULT_TYPE in ["table", "audacity", "r", "kaleidoscope", "csv"]:
-        cfg.RESULT_TYPE = "table"
-
-    # Set output file
-    if args.output_file is not None and cfg.RESULT_TYPE == "table":
-        cfg.OUTPUT_FILE = args.output_file
-    else:
-        cfg.OUTPUT_FILE = None
-
-    # Set number of threads
-    if os.path.isdir(cfg.INPUT_PATH):
-        cfg.CPU_THREADS = max(1, int(args.threads))
-        cfg.TFLITE_THREADS = 1
-    else:
-        cfg.CPU_THREADS = 1
-        cfg.TFLITE_THREADS = max(1, int(args.threads))
-
-    # Set batch size
-    cfg.BATCH_SIZE = max(1, int(args.batchsize))
-
-    # Add config items to each file list entry.
-    # We have to do this for Windows which does not
-    # support fork() and thus each process has to
-    # have its own config. USE LINUX!
-    flist = [(f, cfg.getConfig()) for f in cfg.FILE_LIST]
-
-    # Analyze files
-    if cfg.CPU_THREADS < 2 or len(flist) < 2:
-        for entry in flist:
-            analyzeFile(entry)
-    else:
-        with Pool(cfg.CPU_THREADS) as p:
-            # Map analyzeFile function to each entry in flist
-            results = p.map_async(analyzeFile, flist)
-            # Wait for all tasks to complete
-            results.wait()
-
-    # Combine results?
-    if not cfg.OUTPUT_FILE is None:
-        print(f"Combining results into {cfg.OUTPUT_FILE}...", end="", flush=True)
-        combineResults(cfg.OUTPUT_PATH, cfg.OUTPUT_FILE)
-        print("done!", flush=True)
+    analyze_main_wrapper(args)
 
     # A few examples to test
     # python3 analyze.py --i example/ --o example/ --slist example/ --min_conf 0.5 --threads 4
