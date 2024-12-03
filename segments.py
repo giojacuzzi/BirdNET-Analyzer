@@ -16,9 +16,6 @@ import utils
 # Set numpy random seed
 np.random.seed(cfg.RANDOM_SEED)
 
-print('segments.py')
-
-
 def detectRType(line: str):
     """Detects the type of result file.
 
@@ -90,7 +87,6 @@ def parseFiles(flist: list[dict], max_segments=100):
     species_segments: dict[str, list] = {}
 
     for f in flist:
-        print(f'parseFiles f {f}')
 
         # Paths
         afile = f["audio"]
@@ -144,15 +140,11 @@ def findSegments(afile: str, rfile: str):
     """
     segments: list[dict] = []
 
-    print(f'findSegments {afile} {rfile}')
-
     # Open and parse result file
     lines = utils.readLines(rfile)
 
     # Auto-detect result type
     rtype = detectRType(lines[0])
-    print(f'rtype {rtype}')
-    print(f'first line: {lines[0]}')
 
     # Get start and end times based on rtype
     confidence = 0
@@ -166,8 +158,6 @@ def findSegments(afile: str, rfile: str):
         idx_end = cols.index("End Time (s)")
         idx_species = cols.index("Common Name")
         idx_confidence = cols.index("Confidence")
-        for idx, col in enumerate(cols):
-            print(f"Part: '{col}', Index in 'parts': {idx}")
     
     if rtype == "csv":
         cols = lines[0].split(",")
@@ -181,13 +171,9 @@ def findSegments(afile: str, rfile: str):
             # TODO: Use header columns to get the right indices
             d = line.split("\t")
             start = float(d[idx_start])
-            print(f'start {start}')
             end = float(d[idx_end])
-            print(f'end {end}')
             species = d[idx_species]
-            print(f'species {species}')
             confidence = float(d[idx_confidence])
-            print(f'confidence {confidence}')
 
         elif rtype == "audacity":
             d = line.split("\t")
@@ -315,7 +301,6 @@ def segments_main_wrapper(args):
             p.map(extractSegments, flist)
 
 if __name__ == "__main__":
-    print('segments.py MAIN')
 
     # Parse arguments
     parser = argparse.ArgumentParser(description="Extract segments from audio files based on BirdNET detections.")

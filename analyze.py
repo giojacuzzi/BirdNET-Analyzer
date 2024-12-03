@@ -18,17 +18,8 @@ import model
 import species
 import utils
 
-print('analyze.py')
-
 #                    0       1      2           3             4              5               6                7           8             9           10         11
 RTABLE_HEADER = "Selection\tView\tChannel\tBegin Time (s)\tEnd Time (s)\tLow Freq (Hz)\tHigh Freq (Hz)\tCommon Name\tSpecies Code\tConfidence\tBegin Path\tFile Offset (s)\n"
-
-def mango():
-    print('mango!')
-def apple():
-    print('apple!')
-def pear():
-    print('pear!')
 
 def loadCodes():
     """Loads the eBird codes.
@@ -444,12 +435,8 @@ def analyzeFile(item):
 
 def analyze_main_wrapper(args, script_dir):
     # Set paths relative to script path (requested in #3)
-    # script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    print(f"script_dir {script_dir}")
     cfg.MODEL_PATH = os.path.join(script_dir, cfg.MODEL_PATH)
-    print(f"cfg.MODEL_PATH {cfg.MODEL_PATH}")
     cfg.LABELS_FILE = os.path.join(script_dir, cfg.LABELS_FILE)
-    print(f"cfg.LABELS_FILE {cfg.LABELS_FILE}")
     cfg.TRANSLATED_LABELS_PATH = os.path.join(script_dir, cfg.TRANSLATED_LABELS_PATH)
     cfg.MDATA_MODEL_PATH = os.path.join(script_dir, cfg.MDATA_MODEL_PATH)
     cfg.CODES_FILE = os.path.join(script_dir, cfg.CODES_FILE)
@@ -462,14 +449,11 @@ def analyze_main_wrapper(args, script_dir):
     cfg.SKIP_EXISTING_RESULTS = args.skip_existing_results
 
     # Set custom classifier?
-    print(f"mango {args.classifier} {type(args.classifier)}")
     if args.classifier is not None:
         cfg.CUSTOM_CLASSIFIER = args.classifier  # we treat this as absolute path, so no need to join with dirname
-        print(f'cfg.CUSTOM_CLASSIFIER {cfg.CUSTOM_CLASSIFIER}')
 
         if args.classifier.endswith(".tflite"):
             cfg.LABELS_FILE = args.classifier.replace(".tflite", "_Labels.txt")  # same for labels file
-            print(f'custom cfg.LABELS_FILE {cfg.LABELS_FILE}')
             cfg.LABELS = utils.readLines(cfg.LABELS_FILE)
         else:
             cfg.APPLY_SIGMOID = False
@@ -525,7 +509,6 @@ def analyze_main_wrapper(args, script_dir):
         print(f"Found {len(cfg.FILE_LIST)} files to analyze")
     else:
         cfg.FILE_LIST = [cfg.INPUT_PATH]
-    print(f'cfg.FILE_LIST {cfg.FILE_LIST}')
 
     # Set confidence threshold
     cfg.MIN_CONFIDENCE = max(0.01, min(0.99, float(args.min_conf)))
@@ -551,7 +534,6 @@ def analyze_main_wrapper(args, script_dir):
         cfg.OUTPUT_FILE = args.output_file
     else:
         cfg.OUTPUT_FILE = None
-    print(f'cfg.OUTPUT_FILE {cfg.OUTPUT_FILE}')
 
     # Set number of threads
     if os.path.isdir(cfg.INPUT_PATH):
@@ -569,22 +551,17 @@ def analyze_main_wrapper(args, script_dir):
     # support fork() and thus each process has to
     # have its own config. USE LINUX!
     flist = [(f, cfg.getConfig()) for f in cfg.FILE_LIST]
-    print(f'flist length {len(flist)}')
 
     # Analyze files
     if cfg.CPU_THREADS < 2 or len(flist) < 2:
-        print(f'analyzing without multithread')
         for entry in flist:
             analyzeFile(entry)
     else:
-        print(f'starting Pool({cfg.CPU_THREADS})')
         with Pool(cfg.CPU_THREADS) as p:
             # Map analyzeFile function to each entry in flist
             results = p.map_async(analyzeFile, flist)
             # Wait for all tasks to complete
             results.wait()
-    
-    print('finished analyze!')
 
     # Combine results?
     if not cfg.OUTPUT_FILE is None:
@@ -593,7 +570,6 @@ def analyze_main_wrapper(args, script_dir):
         print("done!", flush=True)
 
 if __name__ == "__main__":
-    print('analyze.py MAIN')
 
     # Freeze support for executable
     # freeze_support()
