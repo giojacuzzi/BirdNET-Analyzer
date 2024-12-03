@@ -347,7 +347,6 @@ def analyzeFile(item):
     # Get file path and restore cfg
     fpath: str = item[0]
     cfg.setConfig(item[1])
-    print(f"Analyzing {fpath}", flush=True)
 
     # Start time
     start_time = datetime.datetime.now()
