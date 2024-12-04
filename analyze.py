@@ -510,7 +510,7 @@ def analyze_main_wrapper(args, script_dir):
         cfg.FILE_LIST = [cfg.INPUT_PATH]
 
     # Set confidence threshold
-    cfg.MIN_CONFIDENCE = max(0.01, min(0.99, float(args.min_conf)))
+    cfg.MIN_CONFIDENCE = max(0.0, min(0.99, float(args.min_conf)))
 
     # Set sensitivity
     cfg.SIGMOID_SENSITIVITY = max(0.5, min(1.0 - (float(args.sensitivity) - 1.0), 1.5))
