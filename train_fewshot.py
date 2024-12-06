@@ -1,7 +1,6 @@
-"""Module for training a custom classifier.
-Adapted by Giordano Jacuzzi
-
-Can be used to train a custom classifier with new training data.
+"""
+Module for training a custom classifier with prespecified training and validation data.
+Adapted by Giordano Jacuzzi from BirdNET-Analyzer train.py
 """
 import argparse
 import multiprocessing
@@ -96,46 +95,13 @@ def _loadTrainingData(cache_mode="none", cache_file="", progress_callback=None):
     development_files = pd.read_csv(cfg.TRAIN_DATA_PATH)
     train_files = development_files[development_files['dataset'] == 'training']
     validation_files = development_files[development_files['dataset'] == 'validation']
-    # print(train_files)
-    # print(train_files['folder'].unique())
 
-    # # DEBUG: 'folders' should contain a list of all subfolders as labels, e.g. 'Catharus guttatus_Hermit Thrush'
-    # # Get list of subfolders as labels
-    # # folders = list(sorted(utils.list_subdirectories(cfg.TRAIN_DATA_PATH))
-    # folders = development_files['labels'].unique()
-    # folders = [str(element) for element in folders]
-    # print('FOLDERS')
-    # print(folders)
+    print('Valid labels:')
+    with open(cfg.TRAIN_LABELS_PATH, 'r') as file:
+        valid_labels = [label.strip() for label in file if label.strip()]
+    print(valid_labels)
 
-    # # DEBUG: 'labels' should contain a list of all BirdNET style labels, e.g. 'Catharus guttatus_Hermit Thrush'
-    # # TODO: Get labels from a labels column that may contain multiple separated by ',' instead of the directory names here
-    # # Read all individual labels from the folder names
-    # labels = []
-
-    # for folder in folders:
-    #     labels_in_folder = folder.split(',')
-    #     for label in labels_in_folder:
-    #         if not label in labels:
-    #             labels.append(label)
-
-    # # Sort labels
-    # labels = list(sorted(labels))
-
-    # # print('LABELS')
-    # # print(labels)
-
-    # # Get valid labels
-    # valid_labels = [l for l in labels if not l.lower() in cfg.NON_EVENT_CLASSES and not l.startswith("-")]
-
-    print('VALID LABELS')
-    valid_labels = pd.read_csv(cfg.TRAIN_LABELS_PATH)
-    valid_labels = valid_labels[valid_labels['train'] == 1]
-    valid_labels = sorted(list(valid_labels['label_birdnet']))
-    valid_labels = [str(element) for element in valid_labels]
-    for index, element in enumerate(valid_labels):
-        print(f"{index} {element}")
-
-    print('ALL ANNOTATED LABELS')
+    print('All annotated labels:')
     all_labels = []
     label_combinations = development_files['labels'].unique()
     for combo in label_combinations:
@@ -283,7 +249,6 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         if on_trial_result:
             on_trial_result(0)
 
-        # TODO: SUPPORT VALIDATION FOR AUTOTUNE
         class BirdNetTuner(keras_tuner.BayesianOptimization):
             def __init__(self, x_train, y_train, x_val, y_val, max_trials, executions_per_trial, on_trial_result):
                 super().__init__(max_trials=max_trials, executions_per_trial=executions_per_trial, overwrite=True, directory="autotune", project_name="birdnet_analyzer")
@@ -325,7 +290,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
                         epochs=cfg.TRAIN_EPOCHS,
                         batch_size=hp.Choice("batch_size", [8, 16, 32, 64, 128], default=cfg.TRAIN_BATCH_SIZE),
                         learning_rate=hp.Choice("learning_rate", [0.1, 0.01, 0.005, 0.002, 0.001, 0.0005, 0.0002, 0.0001], default=cfg.TRAIN_LEARNING_RATE),
-                        val_split=cfg.TRAIN_VAL_SPLIT,
+                        val_split=cfg.TRAIN_VAL_SPLIT, # NOTE: Unused parameter. Validation data is explicitly specified to allow for later performance evaluation.
                         upsampling_ratio=hp.Choice("upsampling_ratio",[0.0], default=cfg.UPSAMPLING_RATIO), # 0.0, 0.25, 0.33, 0.5, 0.75, 1.0
                         upsampling_mode=hp.Choice("upsampling_mode", upsampling_choices, default=cfg.UPSAMPLING_MODE), 
                         train_with_mixup=False, # hp.Boolean("mixup", default=cfg.TRAIN_WITH_MIXUP),
@@ -388,7 +353,7 @@ def trainModel(on_epoch_end=None, on_trial_result=None, on_data_load_end=None):
         epochs=cfg.TRAIN_EPOCHS,
         batch_size=cfg.TRAIN_BATCH_SIZE,
         learning_rate=cfg.TRAIN_LEARNING_RATE,
-        val_split=cfg.TRAIN_VAL_SPLIT,
+        val_split=cfg.TRAIN_VAL_SPLIT, # NOTE: Unused parameter. Validation data is explicitly specified to allow for later performance evaluation.
         upsampling_ratio=cfg.UPSAMPLING_RATIO,
         upsampling_mode=cfg.UPSAMPLING_MODE,
         train_with_mixup=cfg.TRAIN_WITH_MIXUP,
@@ -428,7 +393,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs. Defaults to 50.")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size. Defaults to 32.")
-    parser.add_argument("--val_split", type=float, default=0.2, help="Validation split ratio. Defaults to 0.2.") # TODO
+    parser.add_argument("--val_split", type=float, default=0.2, help="Validation split ratio. Defaults to 0.2.")
     parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate. Defaults to 0.001.")
     parser.add_argument(
         "--hidden_units",
@@ -463,7 +428,7 @@ if __name__ == "__main__":
     cfg.CUSTOM_CLASSIFIER = args.o
     cfg.TRAIN_EPOCHS = args.epochs
     cfg.TRAIN_BATCH_SIZE = args.batch_size
-    cfg.TRAIN_VAL_SPLIT = args.val_split # TODO
+    cfg.TRAIN_VAL_SPLIT = args.val_split
     cfg.TRAIN_LEARNING_RATE = args.learning_rate
     cfg.TRAIN_HIDDEN_UNITS = args.hidden_units
     cfg.TRAIN_DROPOUT = min(max(0, args.dropout), 0.9)

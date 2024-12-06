@@ -170,7 +170,7 @@ def trainLinearClassifier(
     epochs,
     batch_size,
     learning_rate,
-    val_split, # TODO
+    val_split, # NOTE: Unused parameter. Validation data is explicitly specified to allow for later performance evaluation.
     upsampling_ratio,
     upsampling_mode,
     train_with_mixup,
