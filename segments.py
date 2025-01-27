@@ -230,6 +230,11 @@ def extractSegments(item: tuple[tuple[str, list[dict]], float, dict[str]]):
     try:
         # Open audio file
         sig, _ = audio.openAudioFile(afile, cfg.SAMPLE_RATE)
+
+        # Correct DC offset by subtracting the mean (centering signal around zero)
+        if cfg.FILTER_DC:
+            sig = sig - np.mean(sig)
+
     except Exception as ex:
         print(f"Error: Cannot open audio file {afile}", flush=True)
         utils.writeErrorLog(ex)
@@ -280,6 +285,10 @@ def segments_main_wrapper(args):
     # Set number of threads
     cfg.CPU_THREADS = int(args.threads)
 
+    # Filter DC
+    cfg.FILTER_DC = args.filter_dc
+    print(f'args {args.filter_dc} cfg {cfg.FILTER_DC}')
+
     # Set confidence threshold
     cfg.MIN_CONFIDENCE = max(0.01, min(0.99, float(args.min_conf)))
 
@@ -315,6 +324,7 @@ if __name__ == "__main__":
         "--seg_length", type=float, default=3.0, help="Length of extracted segments in seconds. Defaults to 3.0."
     )
     parser.add_argument("--threads", type=int, default=min(8, max(1, multiprocessing.cpu_count() // 2)), help="Number of CPU threads.")
+    parser.add_argument("--filter_dc", action="store_true", help="Flag to correct DC offset")
 
     args = parser.parse_args()
 

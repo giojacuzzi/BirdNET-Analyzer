@@ -52,6 +52,10 @@ SIG_FMAX: int = 15000
 BANDPASS_FMIN: int = 0
 BANDPASS_FMAX: int = 15000
 
+# Flag to filter DC offset for segments
+# Note: DC offset for analyzer is already handled by the bandpass filter
+FILTER_DC: bool = False
+
 #####################
 # Metadata settings #
 #####################
@@ -224,6 +228,7 @@ def getConfig():
         'SIG_FMAX': SIG_FMAX,
         'BANDPASS_FMIN': BANDPASS_FMIN,
         'BANDPASS_FMAX': BANDPASS_FMAX,
+        'FILTER_DC': FILTER_DC,
         'LATITUDE': LATITUDE,
         'LONGITUDE': LONGITUDE,
         'WEEK': WEEK,
@@ -288,6 +293,7 @@ def setConfig(c):
     global SIG_FMAX
     global BANDPASS_FMIN
     global BANDPASS_FMAX
+    global FILTER_DC
     global LATITUDE
     global LONGITUDE
     global WEEK
@@ -348,6 +354,7 @@ def setConfig(c):
     SIG_FMAX = c['SIG_FMAX']
     BANDPASS_FMIN = c['BANDPASS_FMIN']
     BANDPASS_FMAX = c['BANDPASS_FMAX']
+    FILTER_DC = c['FILTER_DC']
     LATITUDE = c['LATITUDE']
     LONGITUDE = c['LONGITUDE']
     WEEK = c['WEEK']
