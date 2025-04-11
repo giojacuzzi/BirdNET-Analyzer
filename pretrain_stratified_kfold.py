@@ -5,7 +5,7 @@
 # - Table containing all training data annotations
 #
 # Output:
-# - Table of development file references for training and validation datasets (data/figures/interim/{model_config_stub}) 
+# - Table of development file references for training and validation datasets (data/cache/{model_config_stub}) 
 #
 # User-defined parameters:
 training_data_audio_path = 'data/training/audio'
@@ -40,8 +40,8 @@ if __name__ == "__main__":
     random.seed(training_seed)
     test_seed = 1 # NOTE: This test seed must remain constant to ensure unbiased evaluation of held-out test data for novel labels
 
-    target_model_stub = f'custom_S{training_seed}_LR{learning_rate}_BS{batch_size}_HU{hidden_units}_LS{label_smooth}_US{int(upsample)}'
-    output_path = f'data/interim/{target_model_stub}/training'
+    target_model_stub = f'target_S{training_seed}_LR{learning_rate}_BS{batch_size}_HU{hidden_units}_LS{label_smooth}_US{int(upsample)}'
+    output_path = f'data/cache/{target_model_stub}/training'
 
     # Load class labels
     source_class_labels = pd.read_csv(os.path.abspath(f'models/source/source_species_list.txt'), header=None)[0].tolist()
