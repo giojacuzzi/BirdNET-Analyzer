@@ -13,8 +13,8 @@ training_data_annotations_path = 'data/training/training_data_annotations.csv'
 target_species_list_file = 'models/target/target_species_list.txt'
 
 # Core hyperparameters
-k = 5                           # Number of folds (1, i.e. no folds, for final model)
-sample_sizes = [10]             # Sample size(s) for model development, e.g. [2, 5, 10, 25, 50, 75, 100] ([125] for final model).
+k = 5                           # Number of folds (1, i.e. no folds, for final model) # 1, 5, 10, 25, 50, 100
+sample_sizes = [100]            # Sample size(s) for model development, e.g. [1, 5, 10, 25, 50, 100] ([125] for final model).
 epochs = 50                     # Default 50 (15 for final model, average of epochs across xval model's best validation losses).
 learning_rate = 0.001           # Default 0.001 (0.001 for final model)
 batch_size    = 10              # Default N (10 for final model)
@@ -124,13 +124,15 @@ if __name__ == "__main__":
         df = df.explode('labels')
         label_counts = df['labels'].value_counts()
         label_counts = label_counts[label_counts.index.isin(labels_to_train + ['Background'])]
+        mean_count = label_counts.mean()
         max_count = label_counts.max()
         min_count = label_counts.min()
         max_labels = label_counts[label_counts == max_count].index.tolist()
         min_labels = label_counts[label_counts == min_count].index.tolist()
         if print_out:
             print(label_counts.to_string())
-            print(f"Majority classes  (N={max_count}): {', '.join(max_labels)}")
+            print(f"Mean training sample size per class N={round(mean_count, 2)}")
+            print(f"Majority classes (N={max_count}): {', '.join(max_labels)}")
             print(f"Miniority classes (N={min_count}): {', '.join(min_labels)}")
             print(f"Class imbalance ratio ({max_count}/{min_count}): {round(max_count/min_count,2)}")
         return(label_counts)
@@ -139,9 +141,10 @@ if __name__ == "__main__":
     print(f'Randomly choosing {development_set_size} examples for each label as development data...')
     development_examples = pd.DataFrame()
     for label_to_train in (labels_to_train + ['Background']):
+        print(f'Label to train: [{label_to_train}]')
         label_examples = available_examples[available_examples['labels'].str.contains(label_to_train, regex=False)]
         if len(label_examples) < development_set_size:
-            print(f'WARNING: Less than {development_set_size} examples available for label {label_to_train}')
+            print(f'WARNING: Less than {development_set_size} examples available for label {label_to_train} ({len(label_examples)} total)')
         sampled_rows = label_examples.sample(n=min(development_set_size, len(label_examples)), random_state=training_seed)
         development_examples = pd.concat([development_examples, sampled_rows], ignore_index=True)
         available_examples = available_examples.drop(sampled_rows.index) # Remove the sampled examples from 'available_examples'
@@ -323,6 +326,9 @@ if __name__ == "__main__":
                 shared_validation_data['dataset'] = 'validation'
             combined_examples = pd.concat([train_samples, shared_validation_data], axis=0)
             combined_examples.to_csv(combined_files_csv_path, index=False)
+
+            sample_class_counts_csv_path = os.path.abspath(f'{output_path}/{model_iteration_id_stub}/trained_class_counts.csv')
+            sample_class_counts.to_csv(sample_class_counts_csv_path)
 
             # Output command to train the model on these samples 
             print(f'Model {os.path.basename(file_model_out)} prepared for training with {sample_size} examples ======================================================================================')
