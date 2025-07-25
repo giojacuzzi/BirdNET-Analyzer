@@ -1,32 +1,38 @@
-# Assemble datasets for model training and validation
-#
-# Input:
-# - Path to directory containing all training audio files
-# - Table containing all training data annotations
-#
-# Output:
-# - Table of development file references for training and validation datasets (data/cache/{model_config_stub}) 
-#
-# User-defined parameters:
+"""
+Assemble model development datasets for training, validation, and held-out test performance evaluation.
+
+Input:
+- Path to directory containing all training audio files
+- Table containing all training data annotations
+- Species (i.e. class) list for the model
+- Training hyperparameter specification
+Output:
+- Table of development file references for training and validation datasets (data/cache/{model_config_stub}) 
+"""
+
+## User-defined input arguments:
+# Path to directory containing all training audio files
 training_data_audio_path = 'data/training/audio'
+# Table containing all associated training data annotations
 training_data_annotations_path = 'data/training/training_data_annotations.csv'
+# Species (i.e. class) list for the model
 target_species_list_file = 'models/target/target_species_list.txt'
 
-# Core hyperparameters
-k = 5                           # Number of folds (1, i.e. no folds, for final model) # 1, 5, 10, 25, 50, 100
-sample_sizes = [100]            # Sample size(s) for model development, e.g. [1, 5, 10, 25, 50, 100] ([125] for final model).
-epochs = 50                     # Default 50 (15 for final model, average of epochs across xval model's best validation losses).
-learning_rate = 0.001           # Default 0.001 (0.001 for final model)
-batch_size    = 10              # Default N (10 for final model)
-hidden_units  = 0               # Default 0 (0 for final model)
-training_set_proportion = 0.80  # Remainder reserved for validation (1.0 for final model, i.e. no validation)
-development_set_size = 125      # Total training + validation
-test_set_size = 25              # For novel labels only (25)
+## Core hyperparameters
+k = 5                           # Number of folds for cross validation (1 for final model, i.e. no folds)
+sample_sizes = [10]             # Sample size(s) for model development, (e.g. 1, 5, 10, 25, 50, 100; 125 for final model in Jacuzzi and Olden 2025)
+epochs = 50                     # Default 50 (average of epochs across cross validation model's best validation losses; 15 for final model in Jacuzzi and Olden 2025)
+learning_rate = 0.001           # Default 0.001
+batch_size    = 10              # Default 10
+hidden_units  = 0               # Default 0
+training_set_proportion = 0.8   # Remainder is reserved for validation (set to 1.0 for final model, i.e. no validation data)
+development_set_size = 125      # Maximum number of training + validation examples for each class label
+test_set_size = 25              # Maximum number of held-out test dataset examples for novel class labels only
 
-# Other hyperparameters
-label_smooth  = False # Default False
+## Other hyperparameters (not currently supported)
+label_smooth  = False
 upsample      = False
-############################
+####################################################################################
 
 import random
 import pandas as pd
@@ -51,11 +57,9 @@ if __name__ == "__main__":
     labels_to_train = target_class_labels
 
     print(f"{len(novel_labels_to_train)} novel labels to train:")
-    print(novel_labels_to_train)
-    print()
+    print(f"{novel_labels_to_train}\n")
     print(f"{len(labels_to_train)} total labels to train:")
-    print(labels_to_train)
-    print()
+    print(f"{labels_to_train}\n")
 
     # Prepare output directory
     os.makedirs(output_path, exist_ok=True)
