@@ -15,6 +15,7 @@ Output:
 training_data_audio_path = 'data/training/audio'
 # Table containing all associated training data annotations
 training_data_annotations_path = 'data/training/training_data_annotations.csv'
+training_data_file_extension = '.wav'
 # Species (i.e. class) list for the model
 target_species_list_file = 'models/target/target_species_list.txt'
 
@@ -27,7 +28,7 @@ batch_size    = 10              # Default 10
 hidden_units  = 0               # Default 0
 training_set_proportion = 0.8   # Remainder is reserved for validation (set to 1.0 for final model, i.e. no validation data)
 development_set_size = 125      # Maximum number of training + validation examples for each class label
-test_set_size = 25              # Maximum number of held-out test dataset examples for novel class labels only
+test_set_size = 25              # Maximum number of held-out test dataset examples for novel class labels (optional)
 
 ## Other hyperparameters (not currently supported)
 label_smooth  = False
@@ -95,7 +96,7 @@ if __name__ == "__main__":
 
     # Load annotation labels for the training files and merge, retaining only those that match the available examples
     annotations = pd.read_csv(training_data_annotations_path)
-    annotations['file'] = annotations['file'] + '.wav'
+    annotations['file'] = annotations['file'] + training_data_file_extension
     available_examples = available_examples.merge(annotations[['audio_subdir', 'file', 'labels']], on=['audio_subdir', 'file'], how='left')
     available_examples.loc[available_examples['audio_subdir'] == 'Background', 'labels'] = 'Background' # manually label background examples
 
