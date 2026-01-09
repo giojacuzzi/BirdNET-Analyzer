@@ -505,9 +505,10 @@ def analyze_main_wrapper(args, script_dir):
     # Parse input files
     if os.path.isdir(cfg.INPUT_PATH):
         cfg.FILE_LIST = utils.collect_audio_files(cfg.INPUT_PATH)
-        print(f"Found {len(cfg.FILE_LIST)} files to analyze")
     else:
         cfg.FILE_LIST = [cfg.INPUT_PATH]
+        cfg.INPUT_PATH = os.path.dirname(cfg.INPUT_PATH)
+    print(f"Found {len(cfg.FILE_LIST)} files to analyze")
 
     # Set confidence threshold
     cfg.MIN_CONFIDENCE = max(0.0, min(0.99, float(args.min_conf)))
