@@ -277,6 +277,8 @@ def extractSegments(item: tuple[tuple[str, list[dict]], float, dict[str]]):
 
 def segments_main_wrapper(args):
     # Parse audio and result folders
+    if os.path.isfile(args.audio):
+        args.audio = os.path.dirname(args.audio)
     cfg.FILE_LIST = parseFolders(args.audio, args.results)
 
     # Set output folder
