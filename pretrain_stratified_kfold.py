@@ -106,7 +106,7 @@ if __name__ == "__main__":
     for novel_label in novel_labels_to_train:
         if novel_label == 'Background': # skip the Background label
             continue
-        label_examples = available_examples[available_examples['audio_subdir'] == novel_label]
+        label_examples = available_examples[available_examples['labels'].str.contains(novel_label, regex=False, na=False)]
         sampled_rows = label_examples.sample(n=test_set_size, random_state=test_seed)
         test_examples_novel = pd.concat([test_examples_novel, sampled_rows], ignore_index=True)
         available_examples = available_examples.drop(sampled_rows.index) # Remove the samples from the training data
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     development_examples = pd.DataFrame()
     for label_to_train in (labels_to_train + ['Background']):
         print(f'Label to train: [{label_to_train}]')
-        label_examples = available_examples[available_examples['labels'].str.contains(label_to_train, regex=False)]
+        label_examples = available_examples[available_examples['labels'].str.contains(label_to_train, regex=False, na=False)]
         if len(label_examples) < development_set_size:
             print(f'WARNING: Less than {development_set_size} examples available for label {label_to_train} ({len(label_examples)} total)')
         sampled_rows = label_examples.sample(n=min(development_set_size, len(label_examples)), random_state=training_seed)
